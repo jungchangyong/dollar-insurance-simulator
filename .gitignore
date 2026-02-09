@@ -5,3 +5,6 @@ venv/
 .claude/
 .playwright-mcp/
 nul
+
+# 테스트 스크린샷
+test_*.png
