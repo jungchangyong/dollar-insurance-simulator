@@ -425,6 +425,12 @@
             margin: 30px 0;
         }
 
+        .macd-container {
+            position: relative;
+            height: 200px;
+            margin: 0 0 30px;
+        }
+
         /* 게이지 */
         .rate-gauge {
             margin: 20px 0;
@@ -784,6 +790,10 @@
                 height: 350px;
             }
 
+            .macd-container {
+                height: 150px;
+            }
+
             .schedule-table {
                 font-size: 0.75em;
             }
@@ -999,6 +1009,9 @@
                     <h2>가격 추이 및 누적 매입 평균</h2>
                     <div class="chart-container">
                         <canvas id="priceChart"></canvas>
+                    </div>
+                    <div class="macd-container">
+                        <canvas id="macdChart"></canvas>
                     </div>
                     <div class="metrics-grid" id="priceMetrics">
                         <!-- 가격 메트릭 동적 생성 -->

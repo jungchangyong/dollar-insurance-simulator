@@ -4,6 +4,7 @@ class DollarInvestmentSimulator {
         this.authenticated = false;
         this.exchangeRateData = [];
         this.chart = null;
+        this.macdChart = null;
         this.lastUpdate = null;
         this.csvLoaded = false;
         this.csvLastDate = null;
@@ -290,6 +291,53 @@ class DollarInvestmentSimulator {
             additionalPremiumFee: 0,  // 사업비 없음
             additionalPremiumLimitPct: parseFloat(document.getElementById('additionalPremiumLimitPct').value) || 200
         };
+    }
+
+    // ========================
+    // 기술적 지표: 이동평균선 & MACD
+    // ========================
+    calculateSMA(rates, period) {
+        const result = new Array(rates.length).fill(null);
+        for (let i = period - 1; i < rates.length; i++) {
+            let sum = 0;
+            for (let j = i - period + 1; j <= i; j++) sum += rates[j];
+            result[i] = sum / period;
+        }
+        return result;
+    }
+
+    calculateEMA(values, period) {
+        const result = new Array(values.length).fill(null);
+        const k = 2 / (period + 1);
+        let sum = 0, count = 0, seedIdx = -1;
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] === null) continue;
+            sum += values[i];
+            count++;
+            if (count === period) { seedIdx = i; break; }
+        }
+        if (seedIdx === -1) return result;
+        result[seedIdx] = sum / period;
+        let prev = result[seedIdx];
+        for (let i = seedIdx + 1; i < values.length; i++) {
+            if (values[i] === null) continue;
+            result[i] = values[i] * k + prev * (1 - k);
+            prev = result[i];
+        }
+        return result;
+    }
+
+    calculateMACD(rates) {
+        const ema12 = this.calculateEMA(rates, 12);
+        const ema26 = this.calculateEMA(rates, 26);
+        const macdLine = rates.map((_, i) =>
+            (ema12[i] !== null && ema26[i] !== null) ? ema12[i] - ema26[i] : null
+        );
+        const signal = this.calculateEMA(macdLine, 9);
+        const histogram = macdLine.map((v, i) =>
+            (v !== null && signal[i] !== null) ? v - signal[i] : null
+        );
+        return { macdLine, signal, histogram };
     }
 
     // ========================
@@ -886,15 +934,31 @@ class DollarInvestmentSimulator {
     renderChart(result) {
         const ctx = document.getElementById('priceChart').getContext('2d');
         if (this.chart) this.chart.destroy();
+        if (this.macdChart) this.macdChart.destroy();
 
         // 데이터 샘플링 (성능)
         const maxPoints = 2000;
         const allData = result.allData;
         const step = Math.max(1, Math.floor(allData.length / maxPoints));
-        const sampledData = allData.filter((_, i) => i % step === 0 || i === allData.length - 1);
+        const sampledIndices = [];
+        for (let i = 0; i < allData.length; i++) {
+            if (i % step === 0 || i === allData.length - 1) sampledIndices.push(i);
+        }
+        const sampledData = sampledIndices.map(i => allData[i]);
+
+        // 이동평균선 계산 (전체 데이터 기반)
+        const rates = allData.map(d => d.rate);
+        const sma5 = this.calculateSMA(rates, 5);
+        const sma20 = this.calculateSMA(rates, 20);
+        const sma60 = this.calculateSMA(rates, 60);
+        const sma120 = this.calculateSMA(rates, 120);
 
         const chartData1 = sampledData.map(item => ({ x: item.date.getTime(), y: item.rate }));
         const chartData2 = result.purchaseDates.map((date, i) => ({ x: date.getTime(), y: result.cumulativeAveragePrices[i] }));
+
+        const makeMaData = (maValues) => sampledIndices
+            .filter(i => maValues[i] !== null)
+            .map(i => ({ x: allData[i].date.getTime(), y: maValues[i] }));
 
         const datasets = [
             {
@@ -905,6 +969,43 @@ class DollarInvestmentSimulator {
                 fill: false,
                 pointRadius: 0,
                 pointHoverRadius: 4,
+                tension: 0.1
+            },
+            {
+                label: 'MA5 (5일)',
+                data: makeMaData(sma5),
+                borderColor: '#ff6384',
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0,
+                tension: 0.1,
+                hidden: true
+            },
+            {
+                label: 'MA20 (20일)',
+                data: makeMaData(sma20),
+                borderColor: '#9966ff',
+                borderWidth: 1.2,
+                fill: false,
+                pointRadius: 0,
+                tension: 0.1
+            },
+            {
+                label: 'MA60 (60일)',
+                data: makeMaData(sma60),
+                borderColor: '#ff9f40',
+                borderWidth: 1.5,
+                fill: false,
+                pointRadius: 0,
+                tension: 0.1
+            },
+            {
+                label: 'MA120 (120일)',
+                data: makeMaData(sma120),
+                borderColor: '#4bc0c0',
+                borderWidth: 1.5,
+                fill: false,
+                pointRadius: 0,
                 tension: 0.1
             },
             {
@@ -1042,8 +1143,8 @@ class DollarInvestmentSimulator {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    title: { display: true, text: '환율 추이 및 누적 매입 평균' },
-                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+                    title: { display: true, text: '환율 추이 · 이동평균선 · 누적 매입 평균' },
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } },
                     tooltip: {
                         callbacks: {
                             title: function(items) {
@@ -1059,6 +1160,104 @@ class DollarInvestmentSimulator {
                 interaction: { intersect: false, mode: 'index' }
             },
             plugins: customPlugins
+        });
+
+        // MACD 차트
+        const macdData = this.calculateMACD(rates);
+        this.renderMACDChart(allData, sampledIndices, macdData);
+    }
+
+    renderMACDChart(allData, sampledIndices, macdData) {
+        const canvas = document.getElementById('macdChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        const makeSampledData = (values) => sampledIndices
+            .filter(i => values[i] !== null)
+            .map(i => ({ x: allData[i].date.getTime(), y: values[i] }));
+
+        const histogramData = makeSampledData(macdData.histogram);
+
+        this.macdChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'MACD 히스토그램',
+                        data: histogramData,
+                        borderWidth: 1.5,
+                        fill: 'origin',
+                        pointRadius: 0,
+                        tension: 0,
+                        segment: {
+                            borderColor: (ctx) => ctx.p1.parsed.y >= 0 ? '#28a745' : '#dc3545',
+                            backgroundColor: (ctx) => ctx.p1.parsed.y >= 0 ? 'rgba(40,167,69,0.3)' : 'rgba(220,53,69,0.3)'
+                        },
+                        borderColor: '#999',
+                        backgroundColor: 'rgba(0,0,0,0.1)',
+                        order: 2
+                    },
+                    {
+                        label: 'MACD (12,26)',
+                        data: makeSampledData(macdData.macdLine),
+                        borderColor: '#003b70',
+                        borderWidth: 1.5,
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 1
+                    },
+                    {
+                        label: 'Signal (9)',
+                        data: makeSampledData(macdData.signal),
+                        borderColor: '#ff6384',
+                        borderWidth: 1.5,
+                        borderDash: [3, 3],
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: { display: true, text: 'MACD (12, 26, 9)' },
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                if (items.length > 0) {
+                                    const d = new Date(items[0].parsed.x);
+                                    return d.getFullYear() + '년 ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일';
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        ticks: {
+                            callback: function(value) {
+                                const d = new Date(value);
+                                return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0');
+                            },
+                            maxTicksLimit: 12
+                        }
+                    },
+                    y: {
+                        title: { display: true, text: 'MACD' },
+                        grid: {
+                            color: (context) => context.tick.value === 0 ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'
+                        }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
         });
     }
 
@@ -1327,8 +1526,9 @@ class DollarInvestmentSimulator {
         tabs.forEach(t => { if (t.dataset.tab === tabName) t.classList.add('active'); });
         const content = document.getElementById(tabName + 'Tab');
         if (content) content.classList.add('active');
-        if (tabName === 'chart' && this.chart) {
-            setTimeout(() => this.chart.resize(), 100);
+        if (tabName === 'chart') {
+            if (this.chart) setTimeout(() => this.chart.resize(), 100);
+            if (this.macdChart) setTimeout(() => this.macdChart.resize(), 100);
         }
     }
 
