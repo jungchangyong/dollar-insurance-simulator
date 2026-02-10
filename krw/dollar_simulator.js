@@ -707,19 +707,19 @@ class DollarInvestmentSimulator {
 
         // 요약 카드
         let html = `
-            <div class="metric-card">
+            <div class="metric-card metric-card--investment">
                 <div class="metric-label">총 납입 원화</div>
                 <div class="metric-value">${Math.round(result.totalInvestment).toLocaleString()}원</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card metric-card--value">
                 <div class="metric-label">만기 자산 가치</div>
                 <div class="metric-value">${Math.round(result.finalValue).toLocaleString()}원</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card metric-card--profit">
                 <div class="metric-label">수익률</div>
                 <div class="metric-value ${result.profitRate >= 0 ? 'positive' : 'negative'}">${result.profitRate >= 0 ? '+' : ''}${result.profitRate.toFixed(2)}%</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card metric-card--rate">
                 <div class="metric-label">평균 매입 환율</div>
                 <div class="metric-value">${result.finalAveragePrice.toFixed(0)}원</div>
             </div>`;
@@ -849,7 +849,7 @@ class DollarInvestmentSimulator {
             <div class="flow-connector">▼</div>
             <div class="flow-final">
                 <div class="flow-step-header">
-                    <span class="flow-step-number" style="background:white;color:#003b70;">${stepNum}</span>
+                    <span class="flow-step-number flow-step-number--final">${stepNum}</span>
                     만기 환산
                 </div>
                 <div class="flow-row">
@@ -890,9 +890,11 @@ class DollarInvestmentSimulator {
     // ========================
     // Phase 2-3: 프리셋
     // ========================
-    applyPreset(type) {
+    applyPreset(type, event) {
         const p = this.presets[type];
         if (!p) return;
+        document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+        if (event?.target) event.target.classList.add('active');
         document.getElementById('timeRange').value = p.totalPeriodYears;
         document.getElementById('interval').value = p.interval;
         document.getElementById('dollarPremium').value = p.dollarPremium;
@@ -1264,15 +1266,15 @@ class DollarInvestmentSimulator {
     updatePriceMetrics(result) {
         const el = document.getElementById('priceMetrics');
         el.innerHTML = `
-            <div class="metric-card">
+            <div class="metric-card metric-card--investment">
                 <div class="metric-label">만기 시점 환율</div>
                 <div class="metric-value">${result.finalRate.toFixed(2)}원</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card metric-card--rate">
                 <div class="metric-label">최종 평균 매입 환율</div>
                 <div class="metric-value">${result.finalAveragePrice.toFixed(2)}원</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card metric-card--profit">
                 <div class="metric-label">환율 위치</div>
                 <div class="metric-value">${this.getGaugeText(result)}</div>
             </div>
@@ -1411,16 +1413,16 @@ class DollarInvestmentSimulator {
             const diff = mid - currentPremium;
             resultDiv.innerHTML = `
                 <div class="target-cards">
-                    <div class="metric-card" style="border-left-color:#003b70">
+                    <div class="metric-card metric-card--investment">
                         <div class="metric-label">필요 달러 보험료</div>
                         <div class="metric-value">$${Math.round(mid).toLocaleString()}/월</div>
                         <div class="small-text">원화 고정납입: ${Math.round(sim.fixedKrw).toLocaleString()}원/월</div>
                     </div>
-                    <div class="metric-card" style="border-left-color:#28a745">
+                    <div class="metric-card metric-card--final">
                         <div class="metric-label">목표 달성 예상</div>
                         <div class="metric-value">${Math.round(finalVal).toLocaleString()}원</div>
                     </div>
-                    <div class="metric-card" style="border-left-color:#ffc107">
+                    <div class="metric-card metric-card--diff">
                         <div class="metric-label">현재 설정 대비 차이</div>
                         <div class="metric-value">${diff >= 0 ? '+' : ''}$${Math.round(diff).toLocaleString()}/월</div>
                         <div class="small-text">현재: $${currentPremium}/월</div>
@@ -1569,7 +1571,7 @@ function showTab(tabName) { simulator.showTab(tabName); }
 function calculateTarget() { simulator.calculateTarget(); }
 function downloadConfig() { simulator.downloadConfig(); }
 function uploadConfig(event) { simulator.uploadConfig(event); }
-function applyPreset(type) { simulator.applyPreset(type); }
+function applyPreset(type, event) { simulator.applyPreset(type, event); }
 function toggleSidebar() { simulator.toggleSidebar(); }
 function exportAsImage() { simulator.exportAsImage(); }
 function exportAsCSV() { simulator.exportAsCSV(); }
