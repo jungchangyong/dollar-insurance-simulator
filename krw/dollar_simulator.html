@@ -809,6 +809,52 @@
         .gauge-marker-current { color: var(--color-danger); top: 16px; }
 
         /* ========================
+         * Fullscreen Button
+         * ======================== */
+        .fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 10;
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--color-gray-200);
+            border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.9);
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+            opacity: 0;
+        }
+
+        .chart-container:hover .fullscreen-btn,
+        .macd-container:hover .fullscreen-btn {
+            opacity: 1;
+        }
+
+        .fullscreen-btn:hover {
+            background: var(--color-primary-50);
+            border-color: var(--color-primary-200);
+        }
+
+        .chart-container:fullscreen,
+        .macd-container:fullscreen {
+            height: 100vh;
+            width: 100vw;
+            padding: 24px;
+            background: white;
+            border-radius: 0;
+        }
+
+        .chart-container:fullscreen .fullscreen-btn,
+        .macd-container:fullscreen .fullscreen-btn {
+            opacity: 1;
+        }
+
+        /* ========================
          * Export Buttons
          * ======================== */
         .export-buttons {
@@ -1463,9 +1509,11 @@
                 <div id="chartTab" class="tab-content">
                     <h2>가격 추이 및 누적 매입 평균</h2>
                     <div class="chart-container">
+                        <button class="fullscreen-btn" onclick="toggleFullscreen('priceChart')" title="전체화면">⛶</button>
                         <canvas id="priceChart"></canvas>
                     </div>
                     <div class="macd-container">
+                        <button class="fullscreen-btn" onclick="toggleFullscreen('macdChart')" title="전체화면">⛶</button>
                         <canvas id="macdChart"></canvas>
                     </div>
                     <div class="metrics-grid" id="priceMetrics">

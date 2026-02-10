@@ -24,6 +24,19 @@ class DollarInvestmentSimulator {
 
         this.initializeDate();
         this.setupEventListeners();
+
+        // 전체화면 변경 시 차트 리사이즈
+        document.addEventListener('fullscreenchange', () => {
+            document.querySelectorAll('.fullscreen-btn').forEach(b => b.textContent = '⛶');
+            if (document.fullscreenElement) {
+                const btn = document.fullscreenElement.querySelector('.fullscreen-btn');
+                if (btn) btn.textContent = '✕';
+            }
+            setTimeout(() => {
+                if (this.chart) this.chart.resize();
+                if (this.macdChart) this.macdChart.resize();
+            }, 100);
+        });
     }
 
     // ========================
@@ -1434,6 +1447,19 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
+    // 차트 전체화면
+    // ========================
+    toggleFullscreen(chartId) {
+        const canvas = document.getElementById(chartId);
+        const container = canvas.parentElement;
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            container.requestFullscreen();
+        }
+    }
+
+    // ========================
     // Phase 5-2: 내보내기
     // ========================
     exportAsImage() {
@@ -1574,6 +1600,7 @@ function uploadConfig(event) { simulator.uploadConfig(event); }
 function applyPreset(type, event) { simulator.applyPreset(type, event); }
 function toggleSidebar() { simulator.toggleSidebar(); }
 function exportAsImage() { simulator.exportAsImage(); }
+function toggleFullscreen(id) { simulator.toggleFullscreen(id); }
 function exportAsCSV() { simulator.exportAsCSV(); }
 function moveDate(amount, unit) {
     const el = document.getElementById('endDate');
