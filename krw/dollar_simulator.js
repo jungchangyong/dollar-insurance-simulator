@@ -545,28 +545,18 @@ class DollarInvestmentSimulator {
         let additionalLimitReachedDate = null;
 
         if (additionalPremium > 0 && conversionPeriodYears > 0) {
-            // 한도 계산: 기본보험료 총액 × 한도비율
-            const basicPremiumTotal = dollarPremium * purchaseRates.length;
-            const totalLimit = basicPremiumTotal * additionalLimitPct;
-            const annualLimit = dollarPremium * 12 * additionalLimitPct;
+            // 한도 계산: 해약환급금 × 한도비율 (저축전환의 기본보험료 = 해약환급금)
+            const totalLimit = totalBeforeConversion * additionalLimitPct;
 
             // 저축전환 기간 월별 날짜 생성
             const conversionStart = new Date(holdingEndDate);
             const conversionMonths = Math.round(conversionPeriodYears * 12);
             let cumulativeAdditional = 0;
-            let yearlyAdditional = 0;
-            let currentYear = conversionStart.getFullYear();
 
             for (let m = 0; m < conversionMonths; m++) {
                 const date = new Date(conversionStart);
                 date.setMonth(date.getMonth() + m);
                 if (date >= endDate) break;
-
-                // 연간 한도 리셋
-                if (date.getFullYear() !== currentYear) {
-                    yearlyAdditional = 0;
-                    currentYear = date.getFullYear();
-                }
 
                 // 한도 체크
                 if (cumulativeAdditional >= totalLimit) {
@@ -576,13 +566,10 @@ class DollarInvestmentSimulator {
                     break;
                 }
 
-                // 실제 납입 가능 금액 (한도 초과 방지)
+                // 실제 납입 가능 금액 (총 한도 초과 방지, 월별 제한 없음)
                 let actualPremium = additionalPremium;
                 if (cumulativeAdditional + actualPremium > totalLimit) {
                     actualPremium = totalLimit - cumulativeAdditional;
-                }
-                if (yearlyAdditional + actualPremium > annualLimit) {
-                    actualPremium = annualLimit - yearlyAdditional;
                 }
                 if (actualPremium <= 0) continue;
 
@@ -601,7 +588,6 @@ class DollarInvestmentSimulator {
                     : netDollars;
 
                 cumulativeAdditional += actualPremium;
-                yearlyAdditional += actualPremium;
                 additionalTotalKrw += krwPaid;
                 additionalTotalDollars += netDollars;
                 additionalTotalCompounded += compounded;
@@ -615,9 +601,7 @@ class DollarInvestmentSimulator {
                     compounded,
                     krwPaid,
                     cumulative: cumulativeAdditional,
-                    totalLimit,
-                    yearlyAdditional,
-                    annualLimit
+                    totalLimit
                 });
             }
         }
