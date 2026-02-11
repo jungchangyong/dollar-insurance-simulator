@@ -17,9 +17,8 @@ class DollarInvestmentSimulator {
 
         // 프리셋 정의
         this.presets = {
-            short: { totalPeriodYears: 3, interval: 'monthly', dollarPremium: 200, fixedPaymentMultiplier: 110, purchasePeriodYears: 2, holdingPeriodYears: 1, interestRate: 0, compoundRate: 0, reserveInterestRate: 3.25, additionalPremium: 0, additionalPremiumLimitPct: 200 },
-            standard: { totalPeriodYears: 10, interval: 'monthly', dollarPremium: 300, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalPremium: 0, additionalPremiumLimitPct: 200 },
-            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 10, holdingPeriodYears: 5, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalPremium: 200, additionalPremiumLimitPct: 200 }
+            standard: { totalPeriodYears: 10, interval: 'monthly', dollarPremium: 300, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 0, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200 },
+            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 10, holdingPeriodYears: 5, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 50000, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200 }
         };
 
         this.initializeDate();
@@ -75,6 +74,20 @@ class DollarInvestmentSimulator {
         document.getElementById('holdingPeriod').addEventListener('change', () => { this.validatePeriods(); this.toggleDollarPremiumFields(); });
         document.getElementById('timeRange').addEventListener('change', () => { this.autoSetHoldingPeriod(); this.validatePeriods(); this.toggleDollarPremiumFields(); });
         document.getElementById('dollarPremium').addEventListener('change', () => this.toggleDollarPremiumFields());
+        // 전략 설명 동적 업데이트
+        const strategyEl = document.getElementById('additionalStrategy');
+        if (strategyEl) {
+            strategyEl.addEventListener('change', () => {
+                const desc = document.getElementById('strategyDesc');
+                if (!desc) return;
+                const descs = {
+                    monthly: '* 저축전환 기간 중 매월 균등 납입',
+                    ma_cross: '* 60일 이동평균이 120일선 아래일 때만 매수 (환율 하락 추세)',
+                    below_avg: '* 현재 환율이 평균 매입가 이하일 때만 매수 (저점 매수)'
+                };
+                desc.textContent = descs[strategyEl.value] || descs.monthly;
+            });
+        }
         // 초기 필드 표시/숨김
         this.toggleDollarPremiumFields();
     }
@@ -302,8 +315,8 @@ class DollarInvestmentSimulator {
             dollarPremium: parseFloat(document.getElementById('dollarPremium').value),
             fixedPaymentMultiplier: parseFloat(document.getElementById('fixedPaymentMultiplier').value),
             reserveInterestRate: parseFloat(document.getElementById('reserveInterestRate').value),
-            additionalPremium: parseFloat(document.getElementById('additionalPremium').value) || 0,
-            additionalPremiumFee: 0,  // 사업비 없음
+            additionalBudget: parseFloat(document.getElementById('additionalBudget').value) || 0,
+            additionalStrategy: document.getElementById('additionalStrategy')?.value || 'monthly',
             additionalPremiumLimitPct: parseFloat(document.getElementById('additionalPremiumLimitPct').value) || 200
         };
     }
@@ -528,60 +541,72 @@ class DollarInvestmentSimulator {
             ? totalBeforeConversion * Math.pow(1 + config.compoundRate / 100, conversionPeriodYears)
             : totalBeforeConversion;
 
-        // 평균 매입 환율 (총 원화 / 총 달러 자산)
+        // 기본 평균 매입 환율 (납입기간까지)
         const totalDollarPosition = basicPremiumTotal + finalReserveBalance;
-        const finalAveragePrice = totalDollarPosition > 0 ? totalInvestment / totalDollarPosition : 0;
+        const basicAveragePrice = totalDollarPosition > 0 ? totalInvestment / totalDollarPosition : 0;
 
         // ========================
-        // 저축전환 후 추가납입
+        // 저축전환 후 추가납입 (전략 기반)
         // ========================
-        const additionalPremium = config.additionalPremium || 0;
-        const additionalFeeRate = 0;  // 사업비 없음
+        const additionalBudget = config.additionalBudget || 0;
+        const additionalStrategy = config.additionalStrategy || 'monthly';
         const additionalLimitPct = (config.additionalPremiumLimitPct || 200) / 100;
         let additionalHistory = [];
         let additionalTotalKrw = 0;
-        let additionalTotalDollars = 0;  // 복리 전 순적립 합계
-        let additionalTotalCompounded = 0;  // 복리 후 합계
+        let additionalTotalDollars = 0;
+        let additionalTotalCompounded = 0;
         let additionalLimitReachedDate = null;
+        // 추가납입 포함 누적 평균 추적
+        let runningTotalKrw = totalInvestment;
+        let runningTotalDollars = totalDollarPosition;
+        const additionalAveragePrices = [];  // { date, avgPrice } 추가납입 구간 평균 변화
 
-        if (additionalPremium > 0 && conversionPeriodYears > 0) {
-            // 한도 계산: 해약환급금 × 한도비율 (저축전환의 기본보험료 = 해약환급금)
+        if (additionalBudget > 0 && conversionPeriodYears > 0) {
             const totalLimit = totalBeforeConversion * additionalLimitPct;
+            const budget = Math.min(additionalBudget, totalLimit);
 
             // 저축전환 기간 월별 날짜 생성
             const conversionStart = new Date(holdingEndDate);
             const conversionMonths = Math.round(conversionPeriodYears * 12);
-            let cumulativeAdditional = 0;
-
+            const monthlyDates = [];
             for (let m = 0; m < conversionMonths; m++) {
                 const date = new Date(conversionStart);
                 date.setMonth(date.getMonth() + m);
                 if (date >= endDate) break;
+                monthlyDates.push({ date, monthIndex: m });
+            }
 
+            // 전략별 매수 날짜 결정
+            const buyDates = this.getAdditionalBuyDates(
+                additionalStrategy,
+                monthlyDates.map(d => d.date),
+                basicAveragePrice
+            );
+
+            // 매수 회수에 따라 균등 분배
+            const perPurchase = buyDates.length > 0 ? budget / buyDates.length : 0;
+            let cumulativeAdditional = 0;
+
+            for (const date of buyDates) {
                 // 한도 체크
                 if (cumulativeAdditional >= totalLimit) {
-                    if (!additionalLimitReachedDate) {
-                        additionalLimitReachedDate = new Date(date);
-                    }
+                    if (!additionalLimitReachedDate) additionalLimitReachedDate = new Date(date);
                     break;
                 }
 
-                // 실제 납입 가능 금액 (총 한도 초과 방지, 월별 제한 없음)
-                let actualPremium = additionalPremium;
+                let actualPremium = perPurchase;
                 if (cumulativeAdditional + actualPremium > totalLimit) {
                     actualPremium = totalLimit - cumulativeAdditional;
                 }
                 if (actualPremium <= 0) continue;
 
-                // 사업비 없음 (전액 적립)
-                const fee = 0;
                 const netDollars = actualPremium;
-
-                // 환율 조회
                 const rate = this.findClosestRate(date);
                 const krwPaid = actualPremium * rate;
 
                 // 잔여 저축전환 기간에 대한 복리
+                const monthIdx = monthlyDates.findIndex(d => d.date.getTime() === date.getTime());
+                const m = monthIdx >= 0 ? monthlyDates[monthIdx].monthIndex : 0;
                 const remainingYears = conversionPeriodYears - (m / 12);
                 const compounded = remainingYears > 0
                     ? netDollars * Math.pow(1 + config.compoundRate / 100, remainingYears)
@@ -592,19 +617,31 @@ class DollarInvestmentSimulator {
                 additionalTotalDollars += netDollars;
                 additionalTotalCompounded += compounded;
 
+                // 누적 평균 갱신 (추가납입 포함)
+                runningTotalKrw += krwPaid;
+                runningTotalDollars += netDollars;
+
                 additionalHistory.push({
                     date: new Date(date),
                     rate,
                     premium: actualPremium,
-                    fee,
+                    fee: 0,
                     netDollars,
                     compounded,
                     krwPaid,
                     cumulative: cumulativeAdditional,
                     totalLimit
                 });
+
+                additionalAveragePrices.push({
+                    date: new Date(date),
+                    avgPrice: runningTotalKrw / runningTotalDollars
+                });
             }
         }
+
+        // 최종 평균 매입 환율 (추가납입 포함)
+        const finalAveragePrice = runningTotalDollars > 0 ? runningTotalKrw / runningTotalDollars : basicAveragePrice;
 
         // finalUnits = (기본보험료+약정이자+추가적립) × 저축전환복리 — reserve 이미 포함
         const finalValue = finalUnits * finalRate;
@@ -633,6 +670,8 @@ class DollarInvestmentSimulator {
             // 추가납입 관련
             additionalHistory, additionalTotalKrw, additionalTotalDollars,
             additionalTotalCompounded, additionalLimitReachedDate,
+            additionalAveragePrices, additionalStrategy,
+            basicAveragePrice,
             basicTotalInvestment: totalInvestment,  // 기본납입 원화만
             config
         };
@@ -650,6 +689,54 @@ class DollarInvestmentSimulator {
         const prev = data[lo - 1], curr = data[lo];
         return (Math.abs(curr.date - targetDate) < Math.abs(prev.date - targetDate))
             ? curr.rate : prev.rate;
+    }
+
+    findClosestIndex(targetDate) {
+        const data = this.exchangeRateData;
+        let lo = 0, hi = data.length - 1;
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (data[mid].date < targetDate) lo = mid + 1;
+            else hi = mid;
+        }
+        if (lo === 0) return 0;
+        const prev = data[lo - 1], curr = data[lo];
+        return (Math.abs(curr.date - targetDate) < Math.abs(prev.date - targetDate)) ? lo : lo - 1;
+    }
+
+    // 특정 날짜 기준 SMA 계산 (과거 period일간 평균)
+    calculateSMAAtDate(targetDate, period) {
+        const idx = this.findClosestIndex(targetDate);
+        if (idx < period - 1) return null;
+        let sum = 0;
+        for (let i = idx - period + 1; i <= idx; i++) {
+            sum += this.exchangeRateData[i].rate;
+        }
+        return sum / period;
+    }
+
+    // 추가납입 전략별 매수 날짜 결정
+    getAdditionalBuyDates(strategy, monthlyDates, runningAvgRate) {
+        if (strategy === 'monthly') {
+            return monthlyDates;
+        }
+        if (strategy === 'ma_cross') {
+            // 60일선이 120일선 아래인 구간 (환율 하락 추세 = 달러 저가 매수 기회)
+            return monthlyDates.filter(date => {
+                const sma60 = this.calculateSMAAtDate(date, 60);
+                const sma120 = this.calculateSMAAtDate(date, 120);
+                if (sma60 === null || sma120 === null) return false;
+                return sma60 < sma120;
+            });
+        }
+        if (strategy === 'below_avg') {
+            // 현재 환율이 평균 매입가 이하인 월만 매수
+            return monthlyDates.filter(date => {
+                const rate = this.findClosestRate(date);
+                return rate <= runningAvgRate;
+            });
+        }
+        return monthlyDates;
     }
 
     getPurchaseDates(startDate, endDate, interval) {
@@ -680,7 +767,9 @@ class DollarInvestmentSimulator {
 
         let text = `${intervalKo} ${Math.round(result.fixedKrw).toLocaleString()}원 고정납입 (보험료 $${cfg.dollarPremium}, 할증 ${cfg.fixedPaymentMultiplier}%) × ${cfg.purchasePeriodYears}년 → 총 $${Math.round(result.totalDollarPurchased).toLocaleString()} 납입, 적립금 $${Math.round(result.finalReserveBalance).toLocaleString()}`;
         if (result.additionalHistory.length > 0) {
-            text += `, 추가납입 $${cfg.additionalPremium}/월 × ${result.additionalHistory.length}회 → $${Math.round(result.additionalTotalCompounded).toLocaleString()}`;
+            const strategyNames = { monthly: '정액', ma_cross: 'MA돌파', below_avg: '저점매수' };
+            const sName = strategyNames[result.additionalStrategy] || '정액';
+            text += `, 추가납입(${sName}) ${result.additionalHistory.length}회 → $${Math.round(result.additionalTotalCompounded).toLocaleString()}`;
         }
         text += `, <span class="banner-profit ${profitClass}">수익률 ${profitSign}${result.profitRate.toFixed(1)}%</span>`;
         banner.innerHTML = text;
@@ -833,7 +922,7 @@ class DollarInvestmentSimulator {
                 </div>
                 ${result.additionalHistory.length > 0 ? `
                 <div class="flow-row">
-                    <span>+ 추가납입 (복리 후, ${result.additionalHistory.length}회)</span>
+                    <span>+ 추가납입 (${({monthly:'정액',ma_cross:'MA돌파',below_avg:'저점매수'})[result.additionalStrategy]||'정액'}, ${result.additionalHistory.length}회, 복리 후)</span>
                     <span>+$${result.additionalTotalCompounded.toFixed(2)}</span>
                 </div>
                 <div class="flow-row dim">
@@ -903,8 +992,8 @@ class DollarInvestmentSimulator {
         document.getElementById('interestRate').value = p.interestRate;
         document.getElementById('compoundRate').value = p.compoundRate;
         document.getElementById('reserveInterestRate').value = p.reserveInterestRate;
-        document.getElementById('additionalPremium').value = p.additionalPremium || 0;
-        // additionalPremiumFee 제거됨 (사업비 없음)
+        document.getElementById('additionalBudget').value = p.additionalBudget || 0;
+        document.getElementById('additionalStrategy').value = p.additionalStrategy || 'monthly';
         document.getElementById('additionalPremiumLimitPct').value = p.additionalPremiumLimitPct || 200;
         this.toggleDollarPremiumFields();
         this.validatePeriods();
@@ -917,7 +1006,7 @@ class DollarInvestmentSimulator {
             - parseFloat(document.getElementById('holdingPeriod').value);
         const showAdditional = conversionYears > 0;
         // 추가납입 섹션 표시/숨김
-        const ids = ['additionalPremiumSection', 'additionalPremiumGroup', 'additionalPremiumLimitGroup'];
+        const ids = ['additionalPremiumSection', 'additionalStrategyGroup', 'additionalBudgetGroup', 'additionalPremiumLimitGroup'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = showAdditional ? 'block' : 'none';
@@ -1069,7 +1158,23 @@ class DollarInvestmentSimulator {
         const chartData1 = sampledData.map(item => ({ x: item.date.getTime(), y: item.rate }));
         const chartData2 = result.purchaseDates.map((date, i) => ({ x: date.getTime(), y: result.cumulativeAveragePrices[i] }));
 
-        // 평균 매입 환율을 만기일까지 연장 (납입 이후에도 손익 영역 표시)
+        // 추가납입 구간의 평균 매입 환율 변화 반영
+        if (result.additionalAveragePrices && result.additionalAveragePrices.length > 0) {
+            // 납입기간 마지막 평균을 거치기간 끝까지 연장
+            if (chartData2.length > 0) {
+                const lastBasicAvg = chartData2[chartData2.length - 1].y;
+                const holdingEndTs = result.holdingEndDate.getTime();
+                if (holdingEndTs > chartData2[chartData2.length - 1].x) {
+                    chartData2.push({ x: holdingEndTs, y: lastBasicAvg });
+                }
+            }
+            // 추가납입 각 시점의 갱신된 평균 추가
+            for (const ap of result.additionalAveragePrices) {
+                chartData2.push({ x: ap.date.getTime(), y: ap.avgPrice });
+            }
+        }
+
+        // 평균 매입 환율을 만기일까지 연장 (손익 영역 표시)
         if (chartData2.length > 0) {
             const lastAvg = chartData2[chartData2.length - 1].y;
             const endTs = result.endDate.getTime();
@@ -1581,10 +1686,7 @@ class DollarInvestmentSimulator {
             // 4-2: 다중 시나리오 비교 테이블
             if (scenarioDiv) {
                 const scenarios = [
-                    { name: '보수적', interestRate: 0, compoundRate: 0 },
-                    { name: '안정', interestRate: 10, compoundRate: 2 },
                     { name: '표준', interestRate: currentSim.config.interestRate, compoundRate: currentSim.config.compoundRate },
-                    { name: '적극적', interestRate: 30, compoundRate: 5 },
                 ];
                 // 각 시나리오별 역산
                 const scenarioResults = scenarios.map(s => {
@@ -1734,7 +1836,8 @@ class DollarInvestmentSimulator {
             compoundRate: 'compoundRate', dollarPremium: 'dollarPremium',
             fixedPaymentMultiplier: 'fixedPaymentMultiplier',
             reserveInterestRate: 'reserveInterestRate',
-            additionalPremium: 'additionalPremium',
+            additionalBudget: 'additionalBudget',
+            additionalStrategy: 'additionalStrategy',
             additionalPremiumLimitPct: 'additionalPremiumLimitPct'
         };
         for (const [key, id] of Object.entries(map)) {

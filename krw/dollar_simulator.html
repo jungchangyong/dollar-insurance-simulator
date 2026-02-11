@@ -1646,7 +1646,6 @@
 
                 <!-- 프리셋 -->
                 <div class="preset-buttons">
-                    <button class="preset-btn" onclick="applyPreset('short', event)">단기 체험</button>
                     <button class="preset-btn" onclick="applyPreset('standard', event)">표준 종신</button>
                     <button class="preset-btn" onclick="applyPreset('long', event)">장기 적립</button>
                 </div>
@@ -1762,16 +1761,32 @@
                 <hr class="section-divider">
                 <div class="section-label" id="additionalPremiumSection" style="display:none;">저축전환 후 추가납입</div>
 
-                <div class="form-group" id="additionalPremiumGroup" style="display:none;">
-                    <label for="additionalPremium">추가납입 보험료 (USD/월)</label>
-                    <input type="number" id="additionalPremium" value="0" step="50" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 저축전환 기간 중 매월 추가 납입할 달러 금액 (0이면 미사용)</div>
+                <div class="form-group" id="additionalStrategyGroup" style="display:none;">
+                    <label for="additionalStrategy">추가납입 전략</label>
+                    <select id="additionalStrategy" onchange="updateSimulation()">
+                        <option value="monthly">매월 정액 납입</option>
+                        <option value="ma_cross">MA 하향돌파 매수 (60/120일)</option>
+                        <option value="below_avg">평균 매입가 이하 매수</option>
+                    </select>
+                    <div class="small-text" id="strategyDesc">* 저축전환 기간 중 매월 균등 납입</div>
+                </div>
+
+                <div class="form-group" id="additionalBudgetGroup" style="display:none;">
+                    <label for="additionalBudget">추가납입 총 예산 (USD)</label>
+                    <input type="number" id="additionalBudget" value="0" step="1000" min="0" onchange="updateSimulation()">
+                    <div class="quick-buttons">
+                        <button class="quick-btn" onclick="setQuickValue('additionalBudget',10000)">$1만</button>
+                        <button class="quick-btn" onclick="setQuickValue('additionalBudget',50000)">$5만</button>
+                        <button class="quick-btn" onclick="setQuickValue('additionalBudget',100000)">$10만</button>
+                        <button class="quick-btn" onclick="setQuickValue('additionalBudget',200000)">$20만</button>
+                    </div>
+                    <div class="small-text">* 전략 조건에 따라 총 예산을 매수 기회에 균등 분배 (0이면 미사용)</div>
                 </div>
 
                 <div class="form-group" id="additionalPremiumLimitGroup" style="display:none;">
                     <label for="additionalPremiumLimitPct">추가납입 한도 (%)</label>
                     <input type="number" id="additionalPremiumLimitPct" value="200" step="10" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 해약환급금 대비 추가납입 최대 한도 (월별 제한 없음)</div>
+                    <div class="small-text">* 해약환급금 대비 추가납입 최대 한도</div>
                 </div>
 
                 <div class="config-section">
