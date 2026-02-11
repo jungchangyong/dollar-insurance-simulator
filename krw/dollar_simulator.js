@@ -58,6 +58,7 @@ class DollarInvestmentSimulator {
     async initialize() {
         this.updateLastUpdateTime();
         await this.loadExchangeRateData();
+        this.initPeriodSlider();
         this.updateSimulation();
     }
 
@@ -267,6 +268,7 @@ class DollarInvestmentSimulator {
     async updateSimulation() {
         if (!this.authenticated) return;
         this.showLoading();
+        this.updateSliderVisual();
         try {
             await this.loadExchangeRateData();
             if (this.exchangeRateData.length === 0) {
@@ -939,6 +941,118 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
+    // 기간 분할 슬라이더
+    // ========================
+    initPeriodSlider() {
+        const slider = document.getElementById('periodSlider');
+        if (!slider) return;
+
+        const track = slider.querySelector('.period-slider-track');
+        const handle1 = document.getElementById('sliderHandle1');
+        const handle2 = document.getElementById('sliderHandle2');
+        let dragging = null;
+        let dragFixedValue = 0;
+
+        const getPos = (e) => {
+            const rect = track.getBoundingClientRect();
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            return Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+        };
+
+        const snap = (years, total) => {
+            const step = total >= 5 ? 0.5 : 0.25;
+            return parseFloat((Math.round(years / step) * step).toFixed(2));
+        };
+
+        const onMove = (e) => {
+            if (!dragging) return;
+            e.preventDefault();
+            const total = parseFloat(document.getElementById('timeRange').value) || 1;
+            const pct = getPos(e);
+
+            if (dragging === handle1) {
+                // 납입/거치 경계 — 전환기간 고정
+                let newPurchase = snap(pct * total, total);
+                newPurchase = Math.max(0, Math.min(total - dragFixedValue, newPurchase));
+                const newHolding = parseFloat((total - newPurchase - dragFixedValue).toFixed(1));
+                document.getElementById('purchasePeriod').value = newPurchase;
+                document.getElementById('holdingPeriod').value = Math.max(0, newHolding);
+            } else {
+                // 거치/전환 경계 — 납입기간 고정
+                let boundary = snap(pct * total, total);
+                boundary = Math.max(dragFixedValue, Math.min(total, boundary));
+                const newHolding = parseFloat((boundary - dragFixedValue).toFixed(1));
+                document.getElementById('holdingPeriod').value = Math.max(0, newHolding);
+            }
+            this.updateSliderVisual();
+        };
+
+        const onEnd = () => {
+            if (dragging) dragging.classList.remove('active');
+            dragging = null;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onEnd);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onEnd);
+            this.toggleDollarPremiumFields();
+            this.updateSimulation();
+        };
+
+        const onStart = (handle, e) => {
+            e.preventDefault();
+            dragging = handle;
+            handle.classList.add('active');
+            const total = parseFloat(document.getElementById('timeRange').value) || 1;
+            const purchase = parseFloat(document.getElementById('purchasePeriod').value) || 0;
+            const holding = parseFloat(document.getElementById('holdingPeriod').value) || 0;
+            if (handle === handle1) {
+                dragFixedValue = Math.max(0, total - purchase - holding); // 전환기간 고정
+            } else {
+                dragFixedValue = purchase; // 납입기간 고정
+            }
+            document.addEventListener('mousemove', onMove, { passive: false });
+            document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend', onEnd);
+        };
+
+        handle1.addEventListener('mousedown', (e) => onStart(handle1, e));
+        handle1.addEventListener('touchstart', (e) => onStart(handle1, e), { passive: false });
+        handle2.addEventListener('mousedown', (e) => onStart(handle2, e));
+        handle2.addEventListener('touchstart', (e) => onStart(handle2, e), { passive: false });
+    }
+
+    updateSliderVisual() {
+        const seg1 = document.getElementById('sliderSegPurchase');
+        if (!seg1) return;
+
+        const total = parseFloat(document.getElementById('timeRange').value) || 1;
+        const purchase = Math.min(parseFloat(document.getElementById('purchasePeriod').value) || 0, total);
+        const holding = Math.min(parseFloat(document.getElementById('holdingPeriod').value) || 0, total - purchase);
+        const conversion = Math.max(0, parseFloat((total - purchase - holding).toFixed(1)));
+
+        const pPct = purchase / total * 100;
+        const hPct = holding / total * 100;
+        const cPct = conversion / total * 100;
+
+        const seg2 = document.getElementById('sliderSegHolding');
+        const seg3 = document.getElementById('sliderSegConversion');
+        const h1 = document.getElementById('sliderHandle1');
+        const h2 = document.getElementById('sliderHandle2');
+
+        seg1.style.flexBasis = pPct + '%';
+        seg2.style.flexBasis = hPct + '%';
+        seg3.style.flexBasis = cPct + '%';
+
+        seg1.textContent = pPct > 18 ? `납입 ${purchase}년` : (pPct > 8 ? `${purchase}` : '');
+        seg2.textContent = hPct > 18 ? `거치 ${holding}년` : (hPct > 8 ? `${holding}` : '');
+        seg3.textContent = cPct > 18 ? `전환 ${conversion}년` : (cPct > 8 ? `${conversion}` : '');
+
+        if (h1) h1.style.left = pPct + '%';
+        if (h2) h2.style.left = (pPct + hPct) + '%';
+    }
+
+    // ========================
     // Phase 3: 차트
     // ========================
     updateChartTab(result) {
@@ -971,6 +1085,15 @@ class DollarInvestmentSimulator {
         const chartData1 = sampledData.map(item => ({ x: item.date.getTime(), y: item.rate }));
         const chartData2 = result.purchaseDates.map((date, i) => ({ x: date.getTime(), y: result.cumulativeAveragePrices[i] }));
 
+        // 평균 매입 환율을 만기일까지 연장 (납입 이후에도 손익 영역 표시)
+        if (chartData2.length > 0) {
+            const lastAvg = chartData2[chartData2.length - 1].y;
+            const endTs = result.endDate.getTime();
+            if (endTs > chartData2[chartData2.length - 1].x) {
+                chartData2.push({ x: endTs, y: lastAvg });
+            }
+        }
+
         const makeMaData = (maValues) => sampledIndices
             .filter(i => maValues[i] !== null)
             .map(i => ({ x: allData[i].date.getTime(), y: maValues[i] }));
@@ -981,7 +1104,11 @@ class DollarInvestmentSimulator {
                 data: chartData1,
                 borderColor: '#003b70',
                 borderWidth: 2,
-                fill: false,
+                fill: {
+                    target: 5,
+                    above: 'rgba(40, 167, 69, 0.15)',
+                    below: 'rgba(220, 53, 69, 0.15)'
+                },
                 pointRadius: 0,
                 pointHoverRadius: 4,
                 tension: 0.1
@@ -1602,6 +1729,11 @@ function toggleSidebar() { simulator.toggleSidebar(); }
 function exportAsImage() { simulator.exportAsImage(); }
 function toggleFullscreen(id) { simulator.toggleFullscreen(id); }
 function exportAsCSV() { simulator.exportAsCSV(); }
+function setQuickValue(inputId, value) {
+    document.getElementById(inputId).value = value;
+    if (inputId === 'dollarPremium') simulator.toggleDollarPremiumFields();
+    simulator.updateSimulation();
+}
 function moveDate(amount, unit) {
     const el = document.getElementById('endDate');
     const d = new Date(el.value);

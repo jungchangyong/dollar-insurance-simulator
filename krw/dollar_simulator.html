@@ -1201,6 +1201,113 @@
         }
 
         /* ========================
+         * Period Slider
+         * ======================== */
+        .period-slider {
+            position: relative;
+            margin: 0 0 16px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        .period-slider-track {
+            display: flex;
+            height: 36px;
+            border-radius: var(--radius-full);
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.12), var(--shadow-xs);
+        }
+
+        .period-slider-seg {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.7em;
+            font-weight: 600;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+
+        .period-slider-seg--purchase { background: linear-gradient(135deg, #001d3d, #003b70); }
+        .period-slider-seg--holding { background: linear-gradient(135deg, #d4a017, #f59e0b); }
+        .period-slider-seg--conversion { background: linear-gradient(135deg, #059669, #10b981); }
+
+        .period-slider-handle {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 44px;
+            background: white;
+            border: 2px solid var(--color-gray-300);
+            border-radius: 4px;
+            cursor: ew-resize;
+            z-index: 2;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .period-slider-handle::after {
+            content: '⋮';
+            color: var(--color-gray-400);
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .period-slider-handle:hover,
+        .period-slider-handle.active {
+            border-color: var(--color-primary-500);
+            box-shadow: var(--shadow-md), 0 0 0 3px rgba(0,119,204,0.15);
+        }
+
+        .period-slider-handle.active::after {
+            color: var(--color-primary-500);
+        }
+
+        /* ========================
+         * Quick Buttons
+         * ======================== */
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .quick-btn {
+            flex: 1;
+            min-width: 0;
+            padding: 5px 2px;
+            border: 1px solid var(--color-gray-200);
+            border-radius: var(--radius-full);
+            background: white;
+            color: var(--color-gray-600);
+            font-size: 0.72em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        .quick-btn:hover {
+            background: var(--color-primary-50);
+            border-color: var(--color-primary-400);
+            color: var(--color-primary-700);
+        }
+
+        .quick-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* ========================
          * Mobile Responsive
          * ======================== */
         @media (max-width: 768px) {
@@ -1413,6 +1520,13 @@
                 <div class="form-group">
                     <label for="dollarPremium">월 보험료 (USD)</label>
                     <input type="number" id="dollarPremium" value="300" step="50" min="1" onchange="updateSimulation()">
+                    <div class="quick-buttons">
+                        <button class="quick-btn" onclick="setQuickValue('dollarPremium',100)">$100</button>
+                        <button class="quick-btn" onclick="setQuickValue('dollarPremium',200)">$200</button>
+                        <button class="quick-btn" onclick="setQuickValue('dollarPremium',300)">$300</button>
+                        <button class="quick-btn" onclick="setQuickValue('dollarPremium',500)">$500</button>
+                        <button class="quick-btn" onclick="setQuickValue('dollarPremium',1000)">$1k</button>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -1430,6 +1544,17 @@
 
                 <hr class="section-divider">
                 <div class="section-label">기간 설정</div>
+
+                <!-- 기간 분할 슬라이더 -->
+                <div class="period-slider" id="periodSlider">
+                    <div class="period-slider-track">
+                        <div class="period-slider-seg period-slider-seg--purchase" id="sliderSegPurchase">납입 7년</div>
+                        <div class="period-slider-seg period-slider-seg--holding" id="sliderSegHolding">거치 3년</div>
+                        <div class="period-slider-seg period-slider-seg--conversion" id="sliderSegConversion"></div>
+                    </div>
+                    <div class="period-slider-handle" id="sliderHandle1"></div>
+                    <div class="period-slider-handle" id="sliderHandle2"></div>
+                </div>
 
                 <div class="form-group">
                     <label for="purchasePeriod">납입기간 (년)</label>
@@ -1565,6 +1690,12 @@
                     <div class="form-group" style="margin-top:20px;">
                         <label for="targetValue">목표 만기 자산 가치 (원)</label>
                         <input type="number" id="targetValue" value="100000000" step="1000000">
+                        <div class="quick-buttons">
+                            <button class="quick-btn" onclick="setQuickValue('targetValue',50000000)">5천만</button>
+                            <button class="quick-btn" onclick="setQuickValue('targetValue',100000000)">1억</button>
+                            <button class="quick-btn" onclick="setQuickValue('targetValue',200000000)">2억</button>
+                            <button class="quick-btn" onclick="setQuickValue('targetValue',500000000)">5억</button>
+                        </div>
                     </div>
 
                     <button class="button" onclick="calculateTarget()">계산 실행</button>
