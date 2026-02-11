@@ -1514,15 +1514,21 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
-    // Phase 4-1: 목표 역산 (카드형)
+    // Phase 4-1: 목표 역산 (카드형) + Phase 4-2: 시나리오 비교 테이블
     // ========================
     async calculateTarget() {
         const targetValue = parseInt(document.getElementById('targetValue').value);
         const resultDiv = document.getElementById('targetResult');
+        const scenarioDiv = document.getElementById('scenarioResult');
         resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div>계산 중...</div>';
+        if (scenarioDiv) scenarioDiv.innerHTML = '';
 
         try {
             const currentSim = this.runSimulation();
+            const currentPremium = currentSim.config.dollarPremium;
+            const currentFinal = currentSim.finalValue;
+            const achievePct = Math.min((currentFinal / targetValue) * 100, 999);
+            const isAchieved = currentFinal >= targetValue;
 
             // dollarPremium($)을 역산
             let low = 10, high = 50000, mid, finalVal, sim;
@@ -1533,27 +1539,123 @@ class DollarInvestmentSimulator {
                 if (Math.abs(finalVal - targetValue) < 1000) break;
                 if (finalVal < targetValue) low = mid; else high = mid;
             }
-            const currentPremium = currentSim.config.dollarPremium;
             const diff = mid - currentPremium;
+            const requiredPremium = Math.round(mid);
+
+            // 4-1: 역산 결과 카드형 시각화
             resultDiv.innerHTML = `
-                <div class="target-cards">
-                    <div class="metric-card metric-card--investment">
-                        <div class="metric-label">필요 달러 보험료</div>
-                        <div class="metric-value">$${Math.round(mid).toLocaleString()}/월</div>
-                        <div class="small-text">원화 고정납입: ${Math.round(sim.fixedKrw).toLocaleString()}원/월</div>
+                <div class="target-comparison">
+                    <div class="target-comparison-header">
+                        <div class="target-comparison-title">목표: ${targetValue.toLocaleString()}원</div>
+                        <div class="target-progress-bar">
+                            <div class="target-progress-fill ${isAchieved ? 'achieved' : ''}" style="width: ${Math.min(achievePct, 100)}%"></div>
+                            <span class="target-progress-label">${achievePct.toFixed(1)}%</span>
+                        </div>
                     </div>
-                    <div class="metric-card metric-card--final">
-                        <div class="metric-label">목표 달성 예상</div>
-                        <div class="metric-value">${Math.round(finalVal).toLocaleString()}원</div>
-                    </div>
-                    <div class="metric-card metric-card--diff">
-                        <div class="metric-label">현재 설정 대비 차이</div>
-                        <div class="metric-value">${diff >= 0 ? '+' : ''}$${Math.round(diff).toLocaleString()}/월</div>
-                        <div class="small-text">현재: $${currentPremium}/월</div>
+                    <div class="target-vs-grid">
+                        <div class="target-vs-card current">
+                            <div class="target-vs-badge">현재 설정</div>
+                            <div class="target-vs-premium">$${currentPremium.toLocaleString()}<small>/월</small></div>
+                            <div class="target-vs-krw">${Math.round(currentSim.fixedKrw).toLocaleString()}원/월</div>
+                            <div class="target-vs-result ${isAchieved ? 'positive' : 'negative'}">
+                                → ${Math.round(currentFinal).toLocaleString()}원
+                            </div>
+                            <div class="target-vs-gap">${isAchieved ? '목표 달성' : `${Math.round(targetValue - currentFinal).toLocaleString()}원 부족`}</div>
+                        </div>
+                        <div class="target-vs-arrow">${isAchieved ? '✓' : '→'}</div>
+                        <div class="target-vs-card required ${isAchieved ? 'achieved' : ''}">
+                            <div class="target-vs-badge">필요 설정</div>
+                            <div class="target-vs-premium">$${requiredPremium.toLocaleString()}<small>/월</small></div>
+                            <div class="target-vs-krw">${Math.round(sim.fixedKrw).toLocaleString()}원/월</div>
+                            <div class="target-vs-result positive">
+                                → ${Math.round(finalVal).toLocaleString()}원
+                            </div>
+                            <div class="target-vs-gap">
+                                ${diff >= 0 ? '+' : ''}$${Math.round(diff).toLocaleString()}/월
+                                (${diff >= 0 ? '+' : ''}${Math.round(diff * currentSim.finalRate).toLocaleString()}원)
+                            </div>
+                        </div>
                     </div>
                 </div>`;
+
+            // 4-2: 다중 시나리오 비교 테이블
+            if (scenarioDiv) {
+                const scenarios = [
+                    { name: '보수적', interestRate: 0, compoundRate: 0 },
+                    { name: '안정', interestRate: 10, compoundRate: 2 },
+                    { name: '표준', interestRate: currentSim.config.interestRate, compoundRate: currentSim.config.compoundRate },
+                    { name: '적극적', interestRate: 30, compoundRate: 5 },
+                ];
+                // 각 시나리오별 역산
+                const scenarioResults = scenarios.map(s => {
+                    // 임시로 DOM 값을 변경해서 시뮬레이션
+                    const origInterest = document.getElementById('interestRate').value;
+                    const origCompound = document.getElementById('compoundRate').value;
+                    document.getElementById('interestRate').value = s.interestRate;
+                    document.getElementById('compoundRate').value = s.compoundRate;
+
+                    // 현재 보험료로 시뮬
+                    const currentResult = this.runSimulation();
+
+                    // 목표 역산
+                    let lo = 10, hi = 50000, m, fv, rs;
+                    for (let i = 0; i < 30; i++) {
+                        m = (lo + hi) / 2;
+                        rs = this.runSimulation({ dollarPremium: m });
+                        fv = rs.finalValue;
+                        if (Math.abs(fv - targetValue) < 1000) break;
+                        if (fv < targetValue) lo = m; else hi = m;
+                    }
+
+                    // DOM 복원
+                    document.getElementById('interestRate').value = origInterest;
+                    document.getElementById('compoundRate').value = origCompound;
+
+                    return {
+                        ...s,
+                        currentFinal: currentResult.finalValue,
+                        requiredPremium: Math.round(m),
+                        requiredKrw: Math.round(rs.fixedKrw),
+                        achievedValue: Math.round(fv)
+                    };
+                });
+
+                const isCurrentScenario = (s) =>
+                    s.interestRate === currentSim.config.interestRate && s.compoundRate === currentSim.config.compoundRate;
+
+                scenarioDiv.innerHTML = `
+                    <h3 style="margin-bottom: 12px;">이율 시나리오별 비교</h3>
+                    <p class="small-text" style="margin-bottom: 12px;">동일 목표(${targetValue.toLocaleString()}원) 달성을 위해 이율 조건별 필요 납입액 비교</p>
+                    <div class="scenario-table-wrap">
+                        <table class="scenario-compare-table">
+                            <thead>
+                                <tr>
+                                    <th>시나리오</th>
+                                    <th>약정이율</th>
+                                    <th>공시이율</th>
+                                    <th>현재보험료 만기가치</th>
+                                    <th>필요 보험료</th>
+                                    <th>필요 원화납입</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${scenarioResults.map(s => `
+                                    <tr class="${isCurrentScenario(s) ? 'scenario-current' : ''}">
+                                        <td><strong>${s.name}</strong>${isCurrentScenario(s) ? ' <span class="scenario-badge">현재</span>' : ''}</td>
+                                        <td>${s.interestRate}%</td>
+                                        <td>${s.compoundRate}%</td>
+                                        <td class="${s.currentFinal >= targetValue ? 'positive' : 'negative'}">${Math.round(s.currentFinal).toLocaleString()}원</td>
+                                        <td><strong>$${s.requiredPremium.toLocaleString()}</strong>/월</td>
+                                        <td>${s.requiredKrw.toLocaleString()}원/월</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            }
         } catch (e) {
             resultDiv.innerHTML = '<div class="error">계산 중 오류가 발생했습니다.</div>';
+            console.error('목표 역산 오류:', e);
         }
     }
 
