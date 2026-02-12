@@ -728,6 +728,28 @@
             opacity: 0.85;
         }
 
+        /* 전략 비교 테이블 */
+        .strategy-comparison { margin-top: 24px; }
+        .strategy-comparison h3 { font-size: 1.1em; margin-bottom: 12px; color: var(--color-text); }
+        .strategy-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .strategy-table thead { background: var(--color-primary); color: #fff; }
+        .strategy-table th { padding: 8px 10px; text-align: right; font-weight: 600; white-space: nowrap; }
+        .strategy-table th:first-child { text-align: left; }
+        .strategy-table td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #eee; }
+        .strategy-table td:first-child { text-align: left; font-weight: 500; }
+        .strategy-table tr.strategy-current { background: rgba(37,99,235,0.06); }
+        .strategy-table tr.strategy-best td:last-child { color: var(--color-success); font-weight: 700; }
+        .strategy-table .strategy-rank { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%; font-size: 0.75em; font-weight: 700; margin-right: 4px; }
+        .strategy-rank-1 { background: #fbbf24; color: #78350f; }
+        .strategy-rank-2 { background: #d1d5db; color: #374151; }
+        .strategy-rank-3 { background: #d97706; color: #fff; }
+        .strategy-table .positive { color: var(--color-success); }
+        .strategy-table .negative { color: var(--color-danger); }
+        .strategy-badge { display: inline-block; font-size: 0.7em; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+        .strategy-badge-current { background: var(--color-primary); color: #fff; }
+        .strategy-badge-best { background: var(--color-success); color: #fff; }
+        .strategy-note { font-size: 0.8em; color: #666; margin-top: 8px; }
+
         .flow-depletion-warning {
             color: var(--color-danger);
             font-size: 0.85em;
@@ -1825,6 +1847,7 @@
                     <div class="small-text" id="periodInfo">
                         납입 기간: - | 유지 기간: - | 저축전환 기간: -
                     </div>
+                    <div id="strategyComparisonSection" style="display:none;"></div>
                 </div>
 
                 <!-- 탭2: 차트 -->

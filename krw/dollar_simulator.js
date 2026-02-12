@@ -294,6 +294,7 @@ class DollarInvestmentSimulator {
             const result = this.runSimulation();
             this.updateSummaryBanner(result);
             this.updateResultsTab(result);
+            this.updateStrategyComparison(result);
             this.updateTimeline(result);
             this.updateChartTab(result);
             this.updateScheduleTab(result);
@@ -1062,6 +1063,96 @@ class DollarInvestmentSimulator {
 
         html += `</div>`; // money-flow 끝
         grid.innerHTML = html;
+    }
+
+    // ========================
+    // 전략 비교 테이블
+    // ========================
+    updateStrategyComparison(currentResult) {
+        const section = document.getElementById('strategyComparisonSection');
+        if (!section) return;
+
+        // 추가납입 예산이 없으면 숨김
+        const budget = currentResult.config.additionalBudget || 0;
+        if (budget <= 0 || currentResult.conversionPeriodYears <= 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        const strategies = [
+            { key: 'monthly', name: '정액 납입' },
+            { key: 'ma_cross', name: 'MA돌파' },
+            { key: 'below_avg', name: '저점매수' },
+            { key: 'value_avg', name: '가치평균법' },
+            { key: 'front_loaded', name: '초기집중' },
+            { key: 'grid', name: '구간매수' },
+            { key: 'core_satellite', name: '코어+위성' }
+        ];
+
+        const el = document.getElementById('additionalStrategy');
+        const currentStrategy = el.value;
+        const results = [];
+
+        for (const s of strategies) {
+            el.value = s.key;
+            const r = this.runSimulation();
+            results.push({
+                ...s,
+                buyCount: r.additionalHistory.length,
+                additionalKrw: r.additionalTotalKrw,
+                additionalCompounded: r.additionalTotalCompounded,
+                totalInvestment: r.totalInvestment,
+                finalValue: r.finalValue,
+                profitRate: r.profitRate,
+                avgRate: r.finalAveragePrice,
+                totalProfit: r.finalValue - r.totalInvestment
+            });
+        }
+
+        // 원래 전략 복원 (UI 재갱신 없이)
+        el.value = currentStrategy;
+
+        // 만기 자산 내림차순 정렬 (절대 금액 기준이 실질적으로 유의미)
+        results.sort((a, b) => b.finalValue - a.finalValue);
+        const bestKey = results[0].key;
+
+        let html = `<div class="strategy-comparison">
+            <h3>📊 추가납입 전략 비교</h3>
+            <table class="strategy-table">
+                <thead><tr>
+                    <th>전략</th><th>매수</th><th>추가납입 원화</th>
+                    <th>복리 후($)</th><th>만기 자산</th><th>수익금</th><th>수익률</th>
+                </tr></thead><tbody>`;
+
+        results.forEach((r, i) => {
+            const isCurrent = r.key === currentStrategy;
+            const isBest = r.key === bestKey;
+            const rowClass = [isCurrent ? 'strategy-current' : '', isBest ? 'strategy-best' : ''].filter(Boolean).join(' ');
+            const rankHtml = i < 3 ? `<span class="strategy-rank strategy-rank-${i + 1}">${i + 1}</span>` : '';
+            const badges = [
+                isCurrent ? '<span class="strategy-badge strategy-badge-current">현재</span>' : '',
+                isBest ? '<span class="strategy-badge strategy-badge-best">최적</span>' : ''
+            ].filter(Boolean).join('');
+            const profitClass = r.profitRate >= 0 ? 'positive' : 'negative';
+            const sign = r.profitRate >= 0 ? '+' : '';
+
+            html += `<tr class="${rowClass}">
+                <td>${rankHtml}${r.name}${badges}</td>
+                <td>${r.buyCount}회</td>
+                <td>${Math.round(r.additionalKrw).toLocaleString()}원</td>
+                <td>$${Math.round(r.additionalCompounded).toLocaleString()}</td>
+                <td>${Math.round(r.finalValue).toLocaleString()}원</td>
+                <td class="${profitClass}">${sign}${Math.round(r.totalProfit).toLocaleString()}원</td>
+                <td class="${profitClass}">${sign}${r.profitRate.toFixed(1)}%</td>
+            </tr>`;
+        });
+
+        html += `</tbody></table>`;
+        html += `<div class="strategy-note">* 동일 설정에서 전략만 변경하여 비교. 환율 데이터 기간에 따라 결과가 달라질 수 있습니다.</div>`;
+        html += `</div>`;
+
+        section.innerHTML = html;
+        section.style.display = 'block';
     }
 
     // ========================
