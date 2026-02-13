@@ -424,6 +424,172 @@
         }
 
         /* ========================
+         * 은행 비교 탭
+         * ======================== */
+        .comparison-params {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            background: var(--color-gray-50);
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 24px;
+        }
+
+        .comparison-param-item label {
+            display: block;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: var(--color-gray-600);
+            margin-bottom: 6px;
+        }
+
+        .comparison-param-item input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--color-gray-200);
+            border-radius: var(--radius-md);
+            font-size: 0.95em;
+            box-sizing: border-box;
+        }
+
+        .param-hint {
+            display: block;
+            font-size: 0.75em;
+            color: var(--color-gray-400);
+            margin-top: 4px;
+        }
+
+        .comparison-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .comparison-card {
+            background: white;
+            padding: 24px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-gray-100);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .comparison-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+        }
+
+        .comparison-card--bank::before {
+            background: linear-gradient(135deg, #059669, #10b981);
+        }
+
+        .comparison-card--insurance::before {
+            background: linear-gradient(135deg, #001d3d, #003566);
+        }
+
+        .comparison-card--result::before {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .comparison-card h3 {
+            font-size: 0.9em;
+            color: var(--color-gray-500);
+            margin: 0 0 12px 0;
+            font-weight: 600;
+        }
+
+        .comparison-card .big-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .comparison-card .sub-value {
+            font-size: 0.9em;
+            color: var(--color-gray-500);
+        }
+
+        .comparison-card .profit-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .profit-badge--positive {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+        }
+
+        .profit-badge--negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        .comparison-table-wrap {
+            overflow-x: auto;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88em;
+        }
+
+        .comparison-table th {
+            background: var(--color-gray-50);
+            padding: 12px 16px;
+            text-align: right;
+            font-weight: 600;
+            color: var(--color-gray-600);
+            border-bottom: 2px solid var(--color-gray-200);
+            white-space: nowrap;
+        }
+
+        .comparison-table th:first-child {
+            text-align: left;
+        }
+
+        .comparison-table td {
+            padding: 12px 16px;
+            text-align: right;
+            border-bottom: 1px solid var(--color-gray-100);
+        }
+
+        .comparison-table td:first-child {
+            text-align: left;
+            font-weight: 600;
+            color: var(--color-gray-700);
+        }
+
+        .comparison-table .winner-cell {
+            font-weight: 700;
+        }
+
+        .comparison-table .bank-col { color: #059669; }
+        .comparison-table .ins-col { color: #003566; }
+        .comparison-table .diff-positive { color: #059669; font-weight: 600; }
+        .comparison-table .diff-negative { color: #dc2626; font-weight: 600; }
+
+        .comparison-detail-section {
+            margin-top: 24px;
+        }
+
+        .comparison-detail-section h3 {
+            font-size: 1em;
+            font-weight: 700;
+            color: var(--color-gray-700);
+            margin-bottom: 12px;
+        }
+
+        /* ========================
          * Timeline Bar
          * ======================== */
         .timeline-bar {
@@ -1835,6 +2001,7 @@
                     <button class="tab" data-tab="chart" onclick="showTab('chart')">📈 차트</button>
                     <button class="tab" data-tab="schedule" onclick="showTab('schedule')">📋 납입 스케줄</button>
                     <button class="tab" data-tab="target" onclick="showTab('target')">🎯 목표 역산</button>
+                    <button class="tab" data-tab="comparison" onclick="showTab('comparison')">🏦 은행 비교</button>
                 </div>
 
                 <!-- 탭1: 투자 성과 -->
@@ -1926,6 +2093,47 @@
 
                     <div class="small-text" style="margin-top: 20px;">
                         ※ 과거 데이터를 기반으로 한 단순 역산이므로 참고용으로만 활용해주세요.
+                    </div>
+                </div>
+
+                <!-- 탭5: 은행 비교 -->
+                <div id="comparisonTab" class="tab-content">
+                    <h2>🏦 은행 달러 예금 vs 달러종신보험</h2>
+                    <p class="small-text" style="margin-bottom: 20px;">동일 원화를 은행 달러 예금에 넣었을 때와 보험에 넣었을 때 수익률을 비교합니다.</p>
+
+                    <!-- 은행 파라미터 입력 -->
+                    <div class="comparison-params">
+                        <div class="comparison-param-item">
+                            <label>환전 수수료 (%)</label>
+                            <input type="number" id="bankExchangeFee" value="1.75" min="0" max="5" step="0.25" onchange="updateComparison()">
+                            <span class="param-hint">일반 1.75%, 우대 0.5~1.0%</span>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>USD 예금 이자율 (%)</label>
+                            <input type="number" id="bankInterestRate" value="3.5" min="0" max="10" step="0.1" onchange="updateComparison()">
+                            <span class="param-hint">은행별 3~5%</span>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>이자소득세 (%)</label>
+                            <input type="number" id="bankTaxRate" value="15.4" min="0" max="50" step="0.1" onchange="updateComparison()">
+                            <span class="param-hint">소득세 14% + 지방세 1.4%</span>
+                        </div>
+                    </div>
+
+                    <!-- 비교 요약 카드 -->
+                    <div id="comparisonSummary" class="comparison-summary"></div>
+
+                    <!-- 비교 차트 -->
+                    <div class="chart-container" style="position: relative; margin: 24px 0;">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+
+                    <!-- 기간별 비교 테이블 -->
+                    <div id="comparisonTableContainer"></div>
+
+                    <div class="small-text" style="margin-top: 20px;">
+                        ※ 은행: 환전수수료 차감 후 달러예금 월복리 적용, 만기 시 이자소득세 공제<br>
+                        ※ 보험: 원화고정납입 메커니즘, 약정이자+공시이율 복리, 10년 유지 시 비과세
                     </div>
                 </div>
             </main>

@@ -292,12 +292,14 @@ class DollarInvestmentSimulator {
                 throw new Error('환율 데이터가 없습니다.');
             }
             const result = this.runSimulation();
+            this.lastResult = result;
             this.updateSummaryBanner(result);
             this.updateResultsTab(result);
             this.updateStrategyComparison(result);
             this.updateTimeline(result);
             this.updateChartTab(result);
             this.updateScheduleTab(result);
+            this.updateComparisonTab(result);
             this.updatePeriodInfo();
         } catch (error) {
             console.error('시뮬레이션 오류:', error);
@@ -675,6 +677,172 @@ class DollarInvestmentSimulator {
             basicAveragePrice,
             basicTotalInvestment: totalInvestment,  // 기본납입 원화만
             config
+        };
+    }
+
+    // ========================
+    // 은행 달러 예금 시뮬레이션
+    // ========================
+    runBankSimulation(insuranceResult) {
+        const exchangeFee = parseFloat(document.getElementById('bankExchangeFee')?.value) || 1.75;
+        const annualRate = parseFloat(document.getElementById('bankInterestRate')?.value) || 3.5;
+        const taxRate = parseFloat(document.getElementById('bankTaxRate')?.value) || 15.4;
+        const monthlyRate = Math.pow(1 + annualRate / 100, 1 / 12) - 1;
+        const feeMultiplier = 1 + exchangeFee / 100; // 환전 시 수수료 포함 환율
+
+        let balance = 0;        // 달러 잔액
+        let totalKrwPaid = 0;   // 총 원화 납입
+        let totalUsdPurchased = 0; // 총 달러 매수
+        let totalInterest = 0;  // 누적 이자
+        const bankHistory = [];
+
+        // 1) 납입기간: 보험과 동일 시점/금액으로 은행에서 달러 환전
+        for (let i = 0; i < insuranceResult.reserveHistory.length; i++) {
+            const entry = insuranceResult.reserveHistory[i];
+            const krwPaid = entry.krwPaid; // 보험에 납입한 동일 원화
+            const rate = entry.rate;
+            const effectiveRate = rate * feeMultiplier; // 수수료 포함 환율
+
+            // 2회차부터 기존 잔액에 월이자 적용
+            if (i > 0 && balance > 0) {
+                const interest = balance * monthlyRate;
+                totalInterest += interest;
+                balance += interest;
+            }
+
+            const usdBought = krwPaid / effectiveRate;
+            balance += usdBought;
+            totalKrwPaid += krwPaid;
+            totalUsdPurchased += usdBought;
+
+            bankHistory.push({
+                date: new Date(entry.date),
+                rate, krwPaid, usdBought, balance,
+                interest: i > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
+                avgRate: totalKrwPaid / totalUsdPurchased,
+                phase: 'payment' // 납입기간
+            });
+        }
+
+        // 2) 거치기간: 추가 납입 없이 이자만 적용
+        const holdingMonths = Math.round(
+            ((insuranceResult.holdingEndDate - insuranceResult.purchaseEndDate) / (1000 * 60 * 60 * 24 * 30.44))
+        );
+        if (holdingMonths > 0) {
+            const holdingStart = new Date(insuranceResult.purchaseEndDate);
+            for (let m = 0; m < holdingMonths; m++) {
+                const interest = balance * monthlyRate;
+                totalInterest += interest;
+                balance += interest;
+                const date = new Date(holdingStart);
+                date.setMonth(date.getMonth() + m + 1);
+                bankHistory.push({
+                    date, rate: this.findClosestRate(date),
+                    krwPaid: 0, usdBought: 0, balance,
+                    interest, avgRate: totalKrwPaid / totalUsdPurchased,
+                    phase: 'holding' // 거치기간
+                });
+            }
+        }
+
+        // 3) 전환기간: 이자 적용 + 추가납입 동일 금액 매수
+        const conversionMonths = Math.round(insuranceResult.conversionPeriodYears * 12);
+        if (conversionMonths > 0) {
+            const convStart = new Date(insuranceResult.holdingEndDate);
+            // 추가납입 날짜→금액 맵
+            const addMap = new Map();
+            if (insuranceResult.additionalHistory) {
+                for (const ah of insuranceResult.additionalHistory) {
+                    addMap.set(ah.date.getTime(), ah.krwPaid);
+                }
+            }
+            for (let m = 0; m < conversionMonths; m++) {
+                const date = new Date(convStart);
+                date.setMonth(date.getMonth() + m);
+
+                // 이자 적용
+                if (balance > 0) {
+                    const interest = balance * monthlyRate;
+                    totalInterest += interest;
+                    balance += interest;
+                }
+
+                // 추가납입과 동일 금액 환전
+                const addKrw = addMap.get(date.getTime()) || 0;
+                let addUsd = 0;
+                if (addKrw > 0) {
+                    const rate = this.findClosestRate(date);
+                    addUsd = addKrw / (rate * feeMultiplier);
+                    balance += addUsd;
+                    totalKrwPaid += addKrw;
+                    totalUsdPurchased += addUsd;
+                }
+
+                bankHistory.push({
+                    date, rate: this.findClosestRate(date),
+                    krwPaid: addKrw, usdBought: addUsd, balance,
+                    interest: balance > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
+                    avgRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
+                    phase: 'conversion' // 전환기간
+                });
+            }
+        }
+
+        // 4) 만기: 세금 계산
+        const tax = totalInterest * (taxRate / 100);
+        const finalUsd = balance - tax;
+        const finalRate = insuranceResult.finalRate;
+        const finalKrw = finalUsd * finalRate;
+        const profitRate = totalKrwPaid > 0
+            ? ((finalKrw - totalKrwPaid) / totalKrwPaid) * 100
+            : 0;
+
+        return {
+            bankHistory,
+            totalKrwPaid,
+            totalUsdPurchased,
+            totalInterest,
+            tax,
+            finalUsd,
+            finalKrw,
+            finalRate,
+            profitRate,
+            averageRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
+            // 기간별 스냅샷 (비교 테이블용)
+            atPaymentEnd: this._bankSnapshot(bankHistory, 'payment', totalKrwPaid, taxRate),
+            atHoldingEnd: holdingMonths > 0
+                ? this._bankSnapshot(bankHistory, 'holding', totalKrwPaid, taxRate)
+                : null,
+            atMaturity: { finalUsd, finalKrw, profitRate, totalKrwPaid, tax, totalInterest }
+        };
+    }
+
+    // 은행 기간별 스냅샷 헬퍼
+    _bankSnapshot(history, phase, totalKrwAtThat, taxRate) {
+        const entries = history.filter(h => h.phase === phase);
+        if (entries.length === 0) return null;
+        const last = entries[entries.length - 1];
+        // 해당 시점까지의 총 원화 = 모든 krwPaid 합산
+        let krwSum = 0;
+        for (const h of history) {
+            krwSum += h.krwPaid;
+            if (h === last) break;
+        }
+        // 해당 시점까지 누적 이자
+        let interestSum = 0;
+        for (const h of history) {
+            if (h.phase !== 'payment' || history.indexOf(h) > 0) {
+                // 대략적 이자 누적
+            }
+            if (h === last) break;
+        }
+        return {
+            date: last.date,
+            balance: last.balance,
+            rate: last.rate,
+            krwValue: last.balance * last.rate,
+            totalKrwPaid: krwSum,
+            avgRate: last.avgRate
         };
     }
 
@@ -2058,6 +2226,377 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
+    // 은행 비교 탭 렌더링
+    // ========================
+    updateComparisonTab(insuranceResult) {
+        if (!insuranceResult) return;
+        const bank = this.runBankSimulation(insuranceResult);
+        this.renderComparisonSummary(insuranceResult, bank);
+        this.renderComparisonChart(insuranceResult, bank);
+        this.renderComparisonTable(insuranceResult, bank);
+    }
+
+    renderComparisonSummary(ins, bank) {
+        const el = document.getElementById('comparisonSummary');
+        if (!el) return;
+
+        const fmt = v => Math.round(v).toLocaleString('ko-KR');
+        const fmtUsd = v => v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const diff = ins.finalValue - bank.finalKrw;
+        const diffPct = bank.finalKrw > 0 ? ((ins.finalValue / bank.finalKrw - 1) * 100) : 0;
+        const insWins = diff > 0;
+
+        el.innerHTML = `
+            <div class="comparison-card comparison-card--bank">
+                <h3>🏦 은행 달러 예금</h3>
+                <div class="big-value">${fmt(bank.finalKrw)}원</div>
+                <div class="sub-value">$${fmtUsd(bank.finalUsd)} × ${fmt(bank.finalRate)}원</div>
+                <span class="profit-badge ${bank.profitRate >= 0 ? 'profit-badge--positive' : 'profit-badge--negative'}">
+                    ${bank.profitRate >= 0 ? '+' : ''}${bank.profitRate.toFixed(1)}%
+                </span>
+                <div class="sub-value" style="margin-top:8px;">
+                    세금(이자소득세): -$${fmtUsd(bank.tax)}
+                </div>
+            </div>
+            <div class="comparison-card comparison-card--insurance">
+                <h3>🛡️ 달러종신보험</h3>
+                <div class="big-value" style="color: var(--color-primary-700);">${fmt(ins.finalValue)}원</div>
+                <div class="sub-value">$${fmtUsd(ins.totalUnits + (ins.additionalTotalCompounded || 0))} × ${fmt(ins.finalRate)}원</div>
+                <span class="profit-badge ${ins.profitRate >= 0 ? 'profit-badge--positive' : 'profit-badge--negative'}">
+                    ${ins.profitRate >= 0 ? '+' : ''}${ins.profitRate.toFixed(1)}%
+                </span>
+                <div class="sub-value" style="margin-top:8px;">
+                    세금: 비과세 (10년 유지)
+                </div>
+            </div>
+            <div class="comparison-card comparison-card--result">
+                <h3>${insWins ? '🛡️ 보험 우위' : '🏦 은행 우위'}</h3>
+                <div class="big-value" style="color: ${insWins ? '#059669' : '#dc2626'};">
+                    ${insWins ? '+' : ''}${fmt(diff)}원
+                </div>
+                <div class="sub-value">
+                    보험이 은행 대비 ${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%
+                </div>
+                <div class="sub-value" style="margin-top:12px; font-size:0.82em; line-height:1.5;">
+                    수익률 차이: ${(ins.profitRate - bank.profitRate).toFixed(1)}%p<br>
+                    총 납입: ${fmt(ins.totalInvestment)}원 / ${fmt(bank.totalKrwPaid)}원
+                </div>
+            </div>
+        `;
+    }
+
+    renderComparisonChart(ins, bank) {
+        const canvas = document.getElementById('comparisonChart');
+        if (!canvas) return;
+
+        if (this.comparisonChart) {
+            this.comparisonChart.destroy();
+            this.comparisonChart = null;
+        }
+
+        // 은행 시계열: 잔액 × 당시 환율 = 원화 가치
+        const bankData = bank.bankHistory.map(h => ({
+            x: h.date.getTime(),
+            y: h.balance * h.rate
+        }));
+
+        // 보험 시계열: 납입기간 중 누적 달러 × 당시 환율
+        const insData = [];
+        let cumDollar = 0;
+        let reserve = 0;
+        for (const h of ins.reserveHistory) {
+            cumDollar += h.dollarPremium;
+            reserve = h.balance;
+            insData.push({
+                x: h.date.getTime(),
+                y: (cumDollar + reserve) * h.rate
+            });
+        }
+
+        // 거치기간 끝: 약정이자 포함
+        if (ins.holdingEndDate && ins.totalBeforeConversion) {
+            const holdRate = this.findClosestRate(ins.holdingEndDate);
+            insData.push({
+                x: ins.holdingEndDate.getTime(),
+                y: ins.totalBeforeConversion * holdRate
+            });
+        }
+
+        // 전환기간: 추가납입 포함 성장
+        if (ins.additionalHistory && ins.additionalHistory.length > 0) {
+            for (const ah of ins.additionalHistory) {
+                // 대략: totalBeforeConversion 복리성장 + 추가납입 누적
+                const elapsed = (ah.date - ins.holdingEndDate) / (1000 * 60 * 60 * 24 * 365.25);
+                const baseGrown = ins.totalBeforeConversion * Math.pow(1 + (ins.config.compoundRate / 100), elapsed);
+                insData.push({
+                    x: ah.date.getTime(),
+                    y: (baseGrown + ah.cumulative) * ah.rate
+                });
+            }
+        }
+
+        // 만기 포인트
+        if (ins.endDate) {
+            insData.push({ x: ins.endDate.getTime(), y: ins.finalValue });
+            const lastBank = bank.bankHistory[bank.bankHistory.length - 1];
+            if (lastBank) {
+                bankData.push({ x: ins.endDate.getTime(), y: bank.finalKrw });
+            }
+        }
+
+        // 샘플링 (최대 500포인트)
+        const sample = (data, max) => {
+            if (data.length <= max) return data;
+            const step = Math.ceil(data.length / max);
+            const result = [];
+            for (let i = 0; i < data.length; i += step) result.push(data[i]);
+            if (result[result.length - 1] !== data[data.length - 1]) result.push(data[data.length - 1]);
+            return result;
+        };
+
+        this.comparisonChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: '🏦 은행 달러 예금',
+                        data: sample(bankData, 500),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        order: 2
+                    },
+                    {
+                        label: '🛡️ 달러종신보험',
+                        data: sample(insData, 500),
+                        borderColor: '#003566',
+                        backgroundColor: 'rgba(0, 53, 102, 0.1)',
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 2.5,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            title: ctx => {
+                                const d = new Date(ctx[0].parsed.x);
+                                return d.toLocaleDateString('ko-KR');
+                            },
+                            label: ctx => {
+                                const v = Math.round(ctx.parsed.y).toLocaleString('ko-KR');
+                                return `${ctx.dataset.label}: ${v}원`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        ticks: {
+                            callback: v => new Date(v).getFullYear(),
+                            maxTicksLimit: 10
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            callback: v => {
+                                if (v >= 1e8) return (v / 1e8).toFixed(1) + '억';
+                                if (v >= 1e4) return (v / 1e4).toFixed(0) + '만';
+                                return v;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderComparisonTable(ins, bank) {
+        const container = document.getElementById('comparisonTableContainer');
+        if (!container) return;
+
+        const fmt = v => Math.round(v).toLocaleString('ko-KR');
+        const fmtUsd = v => '$' + v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmtPct = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+        const fmtDate = d => d ? d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short' }) : '-';
+
+        // 보험 기간별 스냅샷 계산
+        const insAtPayEnd = (() => {
+            const totalDollar = ins.totalDollarPurchased + (ins.reserveAfterPayment || 0);
+            const lastH = ins.reserveHistory[ins.reserveHistory.length - 1];
+            const rate = lastH ? lastH.rate : ins.finalRate;
+            const krwValue = totalDollar * rate;
+            return { usd: totalDollar, krw: krwValue, rate, totalKrwPaid: ins.basicTotalInvestment };
+        })();
+
+        const insAtHoldEnd = (() => {
+            if (!ins.holdingEndDate || ins.holdingEndDate <= ins.purchaseEndDate) return null;
+            const rate = this.findClosestRate(ins.holdingEndDate);
+            const usd = ins.totalBeforeConversion;
+            return { usd, krw: usd * rate, rate, totalKrwPaid: ins.basicTotalInvestment };
+        })();
+
+        const insAtMaturity = {
+            usd: ins.totalUnits + (ins.additionalTotalCompounded || 0),
+            krw: ins.finalValue,
+            rate: ins.finalRate,
+            totalKrwPaid: ins.totalInvestment
+        };
+
+        // 은행 기간별 스냅샷
+        const bankAtPayEnd = bank.atPaymentEnd;
+        const bankAtHoldEnd = bank.atHoldingEnd;
+
+        const rows = [];
+
+        // 납입 완료 시점
+        if (bankAtPayEnd) {
+            const insPct = insAtPayEnd.totalKrwPaid > 0 ? ((insAtPayEnd.krw - insAtPayEnd.totalKrwPaid) / insAtPayEnd.totalKrwPaid * 100) : 0;
+            const bankPct = bankAtPayEnd.totalKrwPaid > 0 ? ((bankAtPayEnd.krwValue - bankAtPayEnd.totalKrwPaid) / bankAtPayEnd.totalKrwPaid * 100) : 0;
+            const diff = insAtPayEnd.krw - bankAtPayEnd.krwValue;
+            rows.push({
+                label: `납입 완료 (${fmtDate(bankAtPayEnd.date)})`,
+                bankUsd: fmtUsd(bankAtPayEnd.balance),
+                bankKrw: fmt(bankAtPayEnd.krwValue) + '원',
+                bankPct: fmtPct(bankPct),
+                insUsd: fmtUsd(insAtPayEnd.usd),
+                insKrw: fmt(insAtPayEnd.krw) + '원',
+                insPct: fmtPct(insPct),
+                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+            });
+        }
+
+        // 거치 완료 시점
+        if (insAtHoldEnd && bankAtHoldEnd) {
+            const insPct = insAtHoldEnd.totalKrwPaid > 0 ? ((insAtHoldEnd.krw - insAtHoldEnd.totalKrwPaid) / insAtHoldEnd.totalKrwPaid * 100) : 0;
+            const bankPct = bankAtHoldEnd.totalKrwPaid > 0 ? ((bankAtHoldEnd.krwValue - bankAtHoldEnd.totalKrwPaid) / bankAtHoldEnd.totalKrwPaid * 100) : 0;
+            const diff = insAtHoldEnd.krw - bankAtHoldEnd.krwValue;
+            rows.push({
+                label: `거치 완료 (${fmtDate(bankAtHoldEnd.date)})`,
+                bankUsd: fmtUsd(bankAtHoldEnd.balance),
+                bankKrw: fmt(bankAtHoldEnd.krwValue) + '원',
+                bankPct: fmtPct(bankPct),
+                insUsd: fmtUsd(insAtHoldEnd.usd),
+                insKrw: fmt(insAtHoldEnd.krw) + '원',
+                insPct: fmtPct(insPct),
+                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+            });
+        }
+
+        // 만기 시점
+        {
+            const diff = insAtMaturity.krw - bank.finalKrw;
+            rows.push({
+                label: `만기 (${fmtDate(ins.endDate)})`,
+                bankUsd: fmtUsd(bank.finalUsd),
+                bankKrw: fmt(bank.finalKrw) + '원',
+                bankPct: fmtPct(bank.profitRate),
+                insUsd: fmtUsd(insAtMaturity.usd),
+                insKrw: fmt(insAtMaturity.krw) + '원',
+                insPct: fmtPct(ins.profitRate),
+                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+            });
+        }
+
+        let html = `
+        <div class="comparison-detail-section">
+            <h3>기간별 비교</h3>
+            <div class="comparison-table-wrap">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;">시점</th>
+                            <th class="bank-col">은행 (USD)</th>
+                            <th class="bank-col">은행 (원화)</th>
+                            <th class="bank-col">수익률</th>
+                            <th class="ins-col">보험 (USD)</th>
+                            <th class="ins-col">보험 (원화)</th>
+                            <th class="ins-col">수익률</th>
+                            <th>차이</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        for (const row of rows) {
+            const diffClass = row.diff >= 0 ? 'diff-positive' : 'diff-negative';
+            html += `
+                        <tr>
+                            <td>${row.label}</td>
+                            <td class="bank-col">${row.bankUsd}</td>
+                            <td class="bank-col">${row.bankKrw}</td>
+                            <td class="bank-col">${row.bankPct}</td>
+                            <td class="ins-col">${row.insUsd}</td>
+                            <td class="ins-col">${row.insKrw}</td>
+                            <td class="ins-col">${row.insPct}</td>
+                            <td class="${diffClass}">${row.diffStr}</td>
+                        </tr>`;
+        }
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="comparison-detail-section">
+            <h3>핵심 비교 요인</h3>
+            <div class="comparison-table-wrap">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;">항목</th>
+                            <th class="bank-col">🏦 은행</th>
+                            <th class="ins-col">🛡️ 보험</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>환전 수수료</td>
+                            <td class="bank-col">${(parseFloat(document.getElementById('bankExchangeFee')?.value) || 1.75).toFixed(2)}%</td>
+                            <td class="ins-col">없음 (보험사 자체 환전)</td>
+                        </tr>
+                        <tr>
+                            <td>이자율 구조</td>
+                            <td class="bank-col">USD 예금 ${(parseFloat(document.getElementById('bankInterestRate')?.value) || 3.5).toFixed(1)}% (전기간 고정)</td>
+                            <td class="ins-col">부리 ${ins.config.reserveInterestRate}% → 약정 ${ins.config.interestRate}% → 공시 ${ins.config.compoundRate}%</td>
+                        </tr>
+                        <tr>
+                            <td>세금</td>
+                            <td class="bank-col">이자소득세 ${(parseFloat(document.getElementById('bankTaxRate')?.value) || 15.4).toFixed(1)}%</td>
+                            <td class="ins-col">비과세 (10년 유지 시)</td>
+                        </tr>
+                        <tr>
+                            <td>평균 매입 환율</td>
+                            <td class="bank-col">${fmt(bank.averageRate)}원</td>
+                            <td class="ins-col">${fmt(ins.finalAveragePrice)}원</td>
+                        </tr>
+                        <tr>
+                            <td>총 납입 원화</td>
+                            <td class="bank-col">${fmt(bank.totalKrwPaid)}원</td>
+                            <td class="ins-col">${fmt(ins.totalInvestment)}원</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+
+        container.innerHTML = html;
+    }
+
+    // ========================
     // 탭/UI 유틸
     // ========================
     showTab(tabName) {
@@ -2071,6 +2610,9 @@ class DollarInvestmentSimulator {
         if (tabName === 'chart') {
             if (this.chart) setTimeout(() => this.chart.resize(), 100);
             if (this.macdChart) setTimeout(() => this.macdChart.resize(), 100);
+        }
+        if (tabName === 'comparison') {
+            if (this.comparisonChart) setTimeout(() => this.comparisonChart.resize(), 100);
         }
     }
 
@@ -2129,4 +2671,9 @@ function moveDate(amount, unit) {
     else d.setDate(d.getDate() + amount);
     el.value = d.toISOString().split('T')[0];
     simulator.updateSimulation();
+}
+function updateComparison() {
+    if (simulator && simulator.lastResult) {
+        simulator.updateComparisonTab(simulator.lastResult);
+    }
 }
