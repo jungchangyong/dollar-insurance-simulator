@@ -846,6 +846,152 @@ class DollarInvestmentSimulator {
         };
     }
 
+    // ========================
+    // ETF 시뮬레이션
+    // ========================
+    runEtfSimulation(insuranceResult) {
+        const expenseRatio = parseFloat(document.getElementById('etfExpenseRatio')?.value) || 0.25;
+        const bondYield = parseFloat(document.getElementById('etfBondYield')?.value) || 4.0;
+        const accountType = document.getElementById('etfAccountType')?.value || 'general';
+        const taxRate = parseFloat(document.getElementById('etfTaxRate')?.value) || 15.4;
+        const netAnnualRate = (bondYield - expenseRatio) / 100;
+        const monthlyRate = Math.pow(1 + netAnnualRate, 1 / 12) - 1;
+
+        let balance = 0;
+        let totalKrwPaid = 0;
+        let totalUsdPurchased = 0;
+        let totalInterest = 0;
+        const etfHistory = [];
+
+        // 1) 납입기간: 보험과 동일 원화로 ETF 매수 (환전수수료 없음)
+        for (let i = 0; i < insuranceResult.reserveHistory.length; i++) {
+            const entry = insuranceResult.reserveHistory[i];
+            const krwPaid = entry.krwPaid;
+            const rate = entry.rate;
+
+            if (i > 0 && balance > 0) {
+                const interest = balance * monthlyRate;
+                totalInterest += interest;
+                balance += interest;
+            }
+
+            const usdBought = krwPaid / rate; // 환전수수료 없음
+            balance += usdBought;
+            totalKrwPaid += krwPaid;
+            totalUsdPurchased += usdBought;
+
+            etfHistory.push({
+                date: new Date(entry.date),
+                rate, krwPaid, usdBought, balance,
+                interest: i > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
+                avgRate: totalKrwPaid / totalUsdPurchased,
+                phase: 'payment'
+            });
+        }
+
+        // 2) 거치기간: 채권 이자만 복리 적용
+        const holdingMonths = Math.round(
+            ((insuranceResult.holdingEndDate - insuranceResult.purchaseEndDate) / (1000 * 60 * 60 * 24 * 30.44))
+        );
+        if (holdingMonths > 0) {
+            const holdingStart = new Date(insuranceResult.purchaseEndDate);
+            for (let m = 0; m < holdingMonths; m++) {
+                const interest = balance * monthlyRate;
+                totalInterest += interest;
+                balance += interest;
+                const date = new Date(holdingStart);
+                date.setMonth(date.getMonth() + m + 1);
+                etfHistory.push({
+                    date, rate: this.findClosestRate(date),
+                    krwPaid: 0, usdBought: 0, balance,
+                    interest, avgRate: totalKrwPaid / totalUsdPurchased,
+                    phase: 'holding'
+                });
+            }
+        }
+
+        // 3) 전환기간: 이자 적용 + 추가납입 동일 금액 매수
+        const conversionMonths = Math.round(insuranceResult.conversionPeriodYears * 12);
+        if (conversionMonths > 0) {
+            const convStart = new Date(insuranceResult.holdingEndDate);
+            const addMap = new Map();
+            if (insuranceResult.additionalHistory) {
+                for (const ah of insuranceResult.additionalHistory) {
+                    addMap.set(ah.date.getTime(), ah.krwPaid);
+                }
+            }
+            for (let m = 0; m < conversionMonths; m++) {
+                const date = new Date(convStart);
+                date.setMonth(date.getMonth() + m);
+
+                if (balance > 0) {
+                    const interest = balance * monthlyRate;
+                    totalInterest += interest;
+                    balance += interest;
+                }
+
+                const addKrw = addMap.get(date.getTime()) || 0;
+                let addUsd = 0;
+                if (addKrw > 0) {
+                    const rate = this.findClosestRate(date);
+                    addUsd = addKrw / rate; // 환전수수료 없음
+                    balance += addUsd;
+                    totalKrwPaid += addKrw;
+                    totalUsdPurchased += addUsd;
+                }
+
+                etfHistory.push({
+                    date, rate: this.findClosestRate(date),
+                    krwPaid: addKrw, usdBought: addUsd, balance,
+                    interest: balance > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
+                    avgRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
+                    phase: 'conversion'
+                });
+            }
+        }
+
+        // 4) 만기: 계좌 유형별 세금 계산
+        const totalProfitKrw = totalInterest * insuranceResult.finalRate;
+        let tax = 0;
+        if (accountType === 'isa') {
+            // ISA: 200만원 비과세 + 초과분 9.9%
+            const taxableKrw = Math.max(0, totalProfitKrw - 2000000);
+            tax = (taxableKrw * 0.099) / insuranceResult.finalRate; // USD 환산
+        } else if (accountType === 'pension') {
+            // 연금저축: 전체 이익 × 세율(3.3~5.5%)
+            tax = totalInterest * (taxRate / 100);
+        } else {
+            // 일반: 전체 이익 × 15.4%
+            tax = totalInterest * (taxRate / 100);
+        }
+
+        const finalUsd = balance - tax;
+        const finalRate = insuranceResult.finalRate;
+        const finalKrw = finalUsd * finalRate;
+        const profitRate = totalKrwPaid > 0
+            ? ((finalKrw - totalKrwPaid) / totalKrwPaid) * 100
+            : 0;
+
+        return {
+            etfHistory,
+            totalKrwPaid,
+            totalUsdPurchased,
+            totalInterest,
+            tax,
+            finalUsd,
+            finalKrw,
+            finalRate,
+            profitRate,
+            averageRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
+            accountType,
+            atPaymentEnd: this._bankSnapshot(etfHistory, 'payment', totalKrwPaid, taxRate),
+            atHoldingEnd: holdingMonths > 0
+                ? this._bankSnapshot(etfHistory, 'holding', totalKrwPaid, taxRate)
+                : null,
+            atMaturity: { finalUsd, finalKrw, profitRate, totalKrwPaid, tax, totalInterest }
+        };
+    }
+
     findClosestRate(targetDate) {
         const data = this.exchangeRateData;
         let lo = 0, hi = data.length - 1;
@@ -2231,20 +2377,31 @@ class DollarInvestmentSimulator {
     updateComparisonTab(insuranceResult) {
         if (!insuranceResult) return;
         const bank = this.runBankSimulation(insuranceResult);
-        this.renderComparisonSummary(insuranceResult, bank);
-        this.renderComparisonChart(insuranceResult, bank);
-        this.renderComparisonTable(insuranceResult, bank);
+        const etf = this.runEtfSimulation(insuranceResult);
+        this.renderComparisonSummary(insuranceResult, bank, etf);
+        this.renderComparisonChart(insuranceResult, bank, etf);
+        this.renderComparisonTable(insuranceResult, bank, etf);
     }
 
-    renderComparisonSummary(ins, bank) {
+    renderComparisonSummary(ins, bank, etf) {
         const el = document.getElementById('comparisonSummary');
         if (!el) return;
 
         const fmt = v => Math.round(v).toLocaleString('ko-KR');
         const fmtUsd = v => v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const diff = ins.finalValue - bank.finalKrw;
-        const diffPct = bank.finalKrw > 0 ? ((ins.finalValue / bank.finalKrw - 1) * 100) : 0;
-        const insWins = diff > 0;
+
+        // 3종 중 우위 판별
+        const values = [
+            { name: '은행', krw: bank.finalKrw, icon: '🏦' },
+            { name: 'ETF', krw: etf.finalKrw, icon: '📈' },
+            { name: '보험', krw: ins.finalValue, icon: '🛡️' }
+        ];
+        values.sort((a, b) => b.krw - a.krw);
+        const winner = values[0];
+        const second = values[1];
+        const winDiff = winner.krw - second.krw;
+
+        const accountLabel = { general: '일반', isa: 'ISA', pension: '연금저축' };
 
         el.innerHTML = `
             <div class="comparison-card comparison-card--bank">
@@ -2256,6 +2413,17 @@ class DollarInvestmentSimulator {
                 </span>
                 <div class="sub-value" style="margin-top:8px;">
                     세금(이자소득세): -$${fmtUsd(bank.tax)}
+                </div>
+            </div>
+            <div class="comparison-card comparison-card--etf">
+                <h3>📈 달러채권 ETF</h3>
+                <div class="big-value" style="color: #7c3aed;">${fmt(etf.finalKrw)}원</div>
+                <div class="sub-value">$${fmtUsd(etf.finalUsd)} × ${fmt(etf.finalRate)}원</div>
+                <span class="profit-badge ${etf.profitRate >= 0 ? 'profit-badge--positive' : 'profit-badge--negative'}">
+                    ${etf.profitRate >= 0 ? '+' : ''}${etf.profitRate.toFixed(1)}%
+                </span>
+                <div class="sub-value" style="margin-top:8px;">
+                    세금(${accountLabel[etf.accountType] || '일반'}): -$${fmtUsd(etf.tax)}
                 </div>
             </div>
             <div class="comparison-card comparison-card--insurance">
@@ -2270,22 +2438,21 @@ class DollarInvestmentSimulator {
                 </div>
             </div>
             <div class="comparison-card comparison-card--result">
-                <h3>${insWins ? '🛡️ 보험 우위' : '🏦 은행 우위'}</h3>
-                <div class="big-value" style="color: ${insWins ? '#059669' : '#dc2626'};">
-                    ${insWins ? '+' : ''}${fmt(diff)}원
+                <h3>${winner.icon} ${winner.name} 우위</h3>
+                <div class="big-value" style="color: #059669;">
+                    +${fmt(winDiff)}원
                 </div>
                 <div class="sub-value">
-                    보험이 은행 대비 ${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%
+                    2위(${second.name}) 대비
                 </div>
                 <div class="sub-value" style="margin-top:12px; font-size:0.82em; line-height:1.5;">
-                    수익률 차이: ${(ins.profitRate - bank.profitRate).toFixed(1)}%p<br>
-                    총 납입: ${fmt(ins.totalInvestment)}원 / ${fmt(bank.totalKrwPaid)}원
+                    은행 ${bank.profitRate >= 0 ? '+' : ''}${bank.profitRate.toFixed(1)}% · ETF ${etf.profitRate >= 0 ? '+' : ''}${etf.profitRate.toFixed(1)}% · 보험 ${ins.profitRate >= 0 ? '+' : ''}${ins.profitRate.toFixed(1)}%
                 </div>
             </div>
         `;
     }
 
-    renderComparisonChart(ins, bank) {
+    renderComparisonChart(ins, bank, etf) {
         const canvas = document.getElementById('comparisonChart');
         if (!canvas) return;
 
@@ -2296,6 +2463,12 @@ class DollarInvestmentSimulator {
 
         // 은행 시계열: 잔액 × 당시 환율 = 원화 가치
         const bankData = bank.bankHistory.map(h => ({
+            x: h.date.getTime(),
+            y: h.balance * h.rate
+        }));
+
+        // ETF 시계열: 잔액 × 당시 환율
+        const etfData = etf.etfHistory.map(h => ({
             x: h.date.getTime(),
             y: h.balance * h.rate
         }));
@@ -2325,7 +2498,6 @@ class DollarInvestmentSimulator {
         // 전환기간: 추가납입 포함 성장
         if (ins.additionalHistory && ins.additionalHistory.length > 0) {
             for (const ah of ins.additionalHistory) {
-                // 대략: totalBeforeConversion 복리성장 + 추가납입 누적
                 const elapsed = (ah.date - ins.holdingEndDate) / (1000 * 60 * 60 * 24 * 365.25);
                 const baseGrown = ins.totalBeforeConversion * Math.pow(1 + (ins.config.compoundRate / 100), elapsed);
                 insData.push({
@@ -2341,6 +2513,10 @@ class DollarInvestmentSimulator {
             const lastBank = bank.bankHistory[bank.bankHistory.length - 1];
             if (lastBank) {
                 bankData.push({ x: ins.endDate.getTime(), y: bank.finalKrw });
+            }
+            const lastEtf = etf.etfHistory[etf.etfHistory.length - 1];
+            if (lastEtf) {
+                etfData.push({ x: ins.endDate.getTime(), y: etf.finalKrw });
             }
         }
 
@@ -2362,7 +2538,18 @@ class DollarInvestmentSimulator {
                         label: '🏦 은행 달러 예금',
                         data: sample(bankData, 500),
                         borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        order: 3
+                    },
+                    {
+                        label: '📈 달러채권 ETF',
+                        data: sample(etfData, 500),
+                        borderColor: '#7c3aed',
+                        backgroundColor: 'rgba(124, 58, 237, 0.08)',
                         fill: true,
                         borderWidth: 2,
                         pointRadius: 0,
@@ -2373,7 +2560,7 @@ class DollarInvestmentSimulator {
                         label: '🛡️ 달러종신보험',
                         data: sample(insData, 500),
                         borderColor: '#003566',
-                        backgroundColor: 'rgba(0, 53, 102, 0.1)',
+                        backgroundColor: 'rgba(0, 53, 102, 0.08)',
                         fill: true,
                         borderWidth: 2,
                         pointRadius: 0,
@@ -2424,7 +2611,7 @@ class DollarInvestmentSimulator {
         });
     }
 
-    renderComparisonTable(ins, bank) {
+    renderComparisonTable(ins, bank, etf) {
         const container = document.getElementById('comparisonTableContainer');
         if (!container) return;
 
@@ -2456,9 +2643,11 @@ class DollarInvestmentSimulator {
             totalKrwPaid: ins.totalInvestment
         };
 
-        // 은행 기간별 스냅샷
+        // 은행/ETF 기간별 스냅샷
         const bankAtPayEnd = bank.atPaymentEnd;
         const bankAtHoldEnd = bank.atHoldingEnd;
+        const etfAtPayEnd = etf.atPaymentEnd;
+        const etfAtHoldEnd = etf.atHoldingEnd;
 
         const rows = [];
 
@@ -2466,16 +2655,12 @@ class DollarInvestmentSimulator {
         if (bankAtPayEnd) {
             const insPct = insAtPayEnd.totalKrwPaid > 0 ? ((insAtPayEnd.krw - insAtPayEnd.totalKrwPaid) / insAtPayEnd.totalKrwPaid * 100) : 0;
             const bankPct = bankAtPayEnd.totalKrwPaid > 0 ? ((bankAtPayEnd.krwValue - bankAtPayEnd.totalKrwPaid) / bankAtPayEnd.totalKrwPaid * 100) : 0;
-            const diff = insAtPayEnd.krw - bankAtPayEnd.krwValue;
+            const etfPct = etfAtPayEnd && etfAtPayEnd.totalKrwPaid > 0 ? ((etfAtPayEnd.krwValue - etfAtPayEnd.totalKrwPaid) / etfAtPayEnd.totalKrwPaid * 100) : 0;
             rows.push({
                 label: `납입 완료 (${fmtDate(bankAtPayEnd.date)})`,
-                bankUsd: fmtUsd(bankAtPayEnd.balance),
-                bankKrw: fmt(bankAtPayEnd.krwValue) + '원',
-                bankPct: fmtPct(bankPct),
-                insUsd: fmtUsd(insAtPayEnd.usd),
-                insKrw: fmt(insAtPayEnd.krw) + '원',
-                insPct: fmtPct(insPct),
-                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+                bankUsd: fmtUsd(bankAtPayEnd.balance), bankKrw: fmt(bankAtPayEnd.krwValue) + '원', bankPct: fmtPct(bankPct),
+                etfUsd: etfAtPayEnd ? fmtUsd(etfAtPayEnd.balance) : '-', etfKrw: etfAtPayEnd ? fmt(etfAtPayEnd.krwValue) + '원' : '-', etfPct: fmtPct(etfPct),
+                insUsd: fmtUsd(insAtPayEnd.usd), insKrw: fmt(insAtPayEnd.krw) + '원', insPct: fmtPct(insPct)
             });
         }
 
@@ -2483,33 +2668,26 @@ class DollarInvestmentSimulator {
         if (insAtHoldEnd && bankAtHoldEnd) {
             const insPct = insAtHoldEnd.totalKrwPaid > 0 ? ((insAtHoldEnd.krw - insAtHoldEnd.totalKrwPaid) / insAtHoldEnd.totalKrwPaid * 100) : 0;
             const bankPct = bankAtHoldEnd.totalKrwPaid > 0 ? ((bankAtHoldEnd.krwValue - bankAtHoldEnd.totalKrwPaid) / bankAtHoldEnd.totalKrwPaid * 100) : 0;
-            const diff = insAtHoldEnd.krw - bankAtHoldEnd.krwValue;
+            const etfPct = etfAtHoldEnd && etfAtHoldEnd.totalKrwPaid > 0 ? ((etfAtHoldEnd.krwValue - etfAtHoldEnd.totalKrwPaid) / etfAtHoldEnd.totalKrwPaid * 100) : 0;
             rows.push({
                 label: `거치 완료 (${fmtDate(bankAtHoldEnd.date)})`,
-                bankUsd: fmtUsd(bankAtHoldEnd.balance),
-                bankKrw: fmt(bankAtHoldEnd.krwValue) + '원',
-                bankPct: fmtPct(bankPct),
-                insUsd: fmtUsd(insAtHoldEnd.usd),
-                insKrw: fmt(insAtHoldEnd.krw) + '원',
-                insPct: fmtPct(insPct),
-                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+                bankUsd: fmtUsd(bankAtHoldEnd.balance), bankKrw: fmt(bankAtHoldEnd.krwValue) + '원', bankPct: fmtPct(bankPct),
+                etfUsd: etfAtHoldEnd ? fmtUsd(etfAtHoldEnd.balance) : '-', etfKrw: etfAtHoldEnd ? fmt(etfAtHoldEnd.krwValue) + '원' : '-', etfPct: fmtPct(etfPct),
+                insUsd: fmtUsd(insAtHoldEnd.usd), insKrw: fmt(insAtHoldEnd.krw) + '원', insPct: fmtPct(insPct)
             });
         }
 
         // 만기 시점
         {
-            const diff = insAtMaturity.krw - bank.finalKrw;
             rows.push({
                 label: `만기 (${fmtDate(ins.endDate)})`,
-                bankUsd: fmtUsd(bank.finalUsd),
-                bankKrw: fmt(bank.finalKrw) + '원',
-                bankPct: fmtPct(bank.profitRate),
-                insUsd: fmtUsd(insAtMaturity.usd),
-                insKrw: fmt(insAtMaturity.krw) + '원',
-                insPct: fmtPct(ins.profitRate),
-                diff, diffStr: (diff >= 0 ? '+' : '') + fmt(diff) + '원'
+                bankUsd: fmtUsd(bank.finalUsd), bankKrw: fmt(bank.finalKrw) + '원', bankPct: fmtPct(bank.profitRate),
+                etfUsd: fmtUsd(etf.finalUsd), etfKrw: fmt(etf.finalKrw) + '원', etfPct: fmtPct(etf.profitRate),
+                insUsd: fmtUsd(insAtMaturity.usd), insKrw: fmt(insAtMaturity.krw) + '원', insPct: fmtPct(ins.profitRate)
             });
         }
+
+        const accountLabels = { general: '일반 15.4%', isa: 'ISA 9.9%', pension: '연금저축 3.3~5.5%' };
 
         let html = `
         <div class="comparison-detail-section">
@@ -2519,29 +2697,32 @@ class DollarInvestmentSimulator {
                     <thead>
                         <tr>
                             <th style="text-align:left;">시점</th>
-                            <th class="bank-col">은행 (USD)</th>
-                            <th class="bank-col">은행 (원화)</th>
+                            <th class="bank-col">은행(USD)</th>
+                            <th class="bank-col">은행(원화)</th>
                             <th class="bank-col">수익률</th>
-                            <th class="ins-col">보험 (USD)</th>
-                            <th class="ins-col">보험 (원화)</th>
+                            <th class="etf-col">ETF(USD)</th>
+                            <th class="etf-col">ETF(원화)</th>
+                            <th class="etf-col">수익률</th>
+                            <th class="ins-col">보험(USD)</th>
+                            <th class="ins-col">보험(원화)</th>
                             <th class="ins-col">수익률</th>
-                            <th>차이</th>
                         </tr>
                     </thead>
                     <tbody>`;
 
         for (const row of rows) {
-            const diffClass = row.diff >= 0 ? 'diff-positive' : 'diff-negative';
             html += `
                         <tr>
                             <td>${row.label}</td>
                             <td class="bank-col">${row.bankUsd}</td>
                             <td class="bank-col">${row.bankKrw}</td>
                             <td class="bank-col">${row.bankPct}</td>
+                            <td class="etf-col">${row.etfUsd}</td>
+                            <td class="etf-col">${row.etfKrw}</td>
+                            <td class="etf-col">${row.etfPct}</td>
                             <td class="ins-col">${row.insUsd}</td>
                             <td class="ins-col">${row.insKrw}</td>
                             <td class="ins-col">${row.insPct}</td>
-                            <td class="${diffClass}">${row.diffStr}</td>
                         </tr>`;
         }
 
@@ -2559,6 +2740,7 @@ class DollarInvestmentSimulator {
                         <tr>
                             <th style="text-align:left;">항목</th>
                             <th class="bank-col">🏦 은행</th>
+                            <th class="etf-col">📈 ETF</th>
                             <th class="ins-col">🛡️ 보험</th>
                         </tr>
                     </thead>
@@ -2566,27 +2748,38 @@ class DollarInvestmentSimulator {
                         <tr>
                             <td>환전 수수료</td>
                             <td class="bank-col">${(parseFloat(document.getElementById('bankExchangeFee')?.value) || 1.75).toFixed(2)}%</td>
+                            <td class="etf-col">없음 (원화 매매)</td>
                             <td class="ins-col">없음 (보험사 자체 환전)</td>
                         </tr>
                         <tr>
-                            <td>이자율 구조</td>
-                            <td class="bank-col">USD 예금 ${(parseFloat(document.getElementById('bankInterestRate')?.value) || 3.5).toFixed(1)}% (전기간 고정)</td>
+                            <td>수익률 구조</td>
+                            <td class="bank-col">USD 예금 ${(parseFloat(document.getElementById('bankInterestRate')?.value) || 0.1).toFixed(1)}%</td>
+                            <td class="etf-col">채권 ${(parseFloat(document.getElementById('etfBondYield')?.value) || 4.0).toFixed(1)}% - 보수 ${(parseFloat(document.getElementById('etfExpenseRatio')?.value) || 0.25).toFixed(2)}%</td>
                             <td class="ins-col">부리 ${ins.config.reserveInterestRate}% → 약정 ${ins.config.interestRate}% → 공시 ${ins.config.compoundRate}%</td>
                         </tr>
                         <tr>
                             <td>세금</td>
                             <td class="bank-col">이자소득세 ${(parseFloat(document.getElementById('bankTaxRate')?.value) || 15.4).toFixed(1)}%</td>
+                            <td class="etf-col">${accountLabels[etf.accountType] || '일반 15.4%'}</td>
                             <td class="ins-col">비과세 (10년 유지 시)</td>
                         </tr>
                         <tr>
                             <td>평균 매입 환율</td>
                             <td class="bank-col">${fmt(bank.averageRate)}원</td>
+                            <td class="etf-col">${fmt(etf.averageRate)}원</td>
                             <td class="ins-col">${fmt(ins.finalAveragePrice)}원</td>
                         </tr>
                         <tr>
                             <td>총 납입 원화</td>
                             <td class="bank-col">${fmt(bank.totalKrwPaid)}원</td>
+                            <td class="etf-col">${fmt(etf.totalKrwPaid)}원</td>
                             <td class="ins-col">${fmt(ins.totalInvestment)}원</td>
+                        </tr>
+                        <tr>
+                            <td>최종 수익률</td>
+                            <td class="bank-col ${bank.profitRate >= 0 ? 'diff-positive' : 'diff-negative'}">${fmtPct(bank.profitRate)}</td>
+                            <td class="etf-col" style="font-weight:600; color: ${etf.profitRate >= 0 ? '#059669' : '#dc2626'}">${fmtPct(etf.profitRate)}</td>
+                            <td class="ins-col ${ins.profitRate >= 0 ? 'diff-positive' : 'diff-negative'}">${fmtPct(ins.profitRate)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -2676,4 +2869,12 @@ function updateComparison() {
     if (simulator && simulator.lastResult) {
         simulator.updateComparisonTab(simulator.lastResult);
     }
+}
+function updateEtfTaxRate() {
+    const type = document.getElementById('etfAccountType')?.value;
+    const taxInput = document.getElementById('etfTaxRate');
+    if (!taxInput) return;
+    const rates = { general: 15.4, isa: 9.9, pension: 3.3 };
+    taxInput.value = rates[type] || 15.4;
+    updateComparison();
 }

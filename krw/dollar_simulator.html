@@ -444,13 +444,15 @@
             margin-bottom: 6px;
         }
 
-        .comparison-param-item input {
+        .comparison-param-item input,
+        .comparison-param-item select {
             width: 100%;
             padding: 8px 12px;
             border: 1px solid var(--color-gray-200);
             border-radius: var(--radius-md);
             font-size: 0.95em;
             box-sizing: border-box;
+            font-family: inherit;
         }
 
         .param-hint {
@@ -490,6 +492,10 @@
 
         .comparison-card--insurance::before {
             background: linear-gradient(135deg, #001d3d, #003566);
+        }
+
+        .comparison-card--etf::before {
+            background: linear-gradient(135deg, #7c3aed, #a78bfa);
         }
 
         .comparison-card--result::before {
@@ -574,6 +580,7 @@
         }
 
         .comparison-table .bank-col { color: #059669; }
+        .comparison-table .etf-col { color: #7c3aed; }
         .comparison-table .ins-col { color: #003566; }
         .comparison-table .diff-positive { color: #059669; font-weight: 600; }
         .comparison-table .diff-negative { color: #dc2626; font-weight: 600; }
@@ -2001,7 +2008,7 @@
                     <button class="tab" data-tab="chart" onclick="showTab('chart')">📈 차트</button>
                     <button class="tab" data-tab="schedule" onclick="showTab('schedule')">📋 납입 스케줄</button>
                     <button class="tab" data-tab="target" onclick="showTab('target')">🎯 목표 역산</button>
-                    <button class="tab" data-tab="comparison" onclick="showTab('comparison')">🏦 은행 비교</button>
+                    <button class="tab" data-tab="comparison" onclick="showTab('comparison')">📊 대안 비교</button>
                 </div>
 
                 <!-- 탭1: 투자 성과 -->
@@ -2098,11 +2105,14 @@
 
                 <!-- 탭5: 은행 비교 -->
                 <div id="comparisonTab" class="tab-content">
-                    <h2>🏦 은행 달러 예금 vs 달러종신보험</h2>
-                    <p class="small-text" style="margin-bottom: 20px;">동일 원화를 은행 달러 예금에 넣었을 때와 보험에 넣었을 때 수익률을 비교합니다.</p>
+                    <h2>📊 은행 · ETF · 보험 비교</h2>
+                    <p class="small-text" style="margin-bottom: 20px;">동일 원화를 은행 달러예금 / 달러채권 ETF / 달러종신보험에 넣었을 때 수익률을 비교합니다.</p>
 
                     <!-- 은행 파라미터 입력 -->
                     <div class="comparison-params">
+                        <div class="comparison-param-item" style="grid-column: 1 / -1;">
+                            <label style="font-size: 0.78em; color: var(--color-primary-600); font-weight: 700; letter-spacing: 0.5px;">🏦 은행 달러 예금</label>
+                        </div>
                         <div class="comparison-param-item">
                             <label>환전 수수료 (%)</label>
                             <input type="number" id="bankExchangeFee" value="1.75" min="0" max="5" step="0.25" onchange="updateComparison()">
@@ -2110,13 +2120,44 @@
                         </div>
                         <div class="comparison-param-item">
                             <label>USD 예금 이자율 (%)</label>
-                            <input type="number" id="bankInterestRate" value="3.5" min="0" max="10" step="0.1" onchange="updateComparison()">
-                            <span class="param-hint">은행별 3~5%</span>
+                            <input type="number" id="bankInterestRate" value="0.1" min="0" max="10" step="0.1" onchange="updateComparison()">
+                            <span class="param-hint">현행 0.1%</span>
                         </div>
                         <div class="comparison-param-item">
                             <label>이자소득세 (%)</label>
                             <input type="number" id="bankTaxRate" value="15.4" min="0" max="50" step="0.1" onchange="updateComparison()">
                             <span class="param-hint">소득세 14% + 지방세 1.4%</span>
+                        </div>
+                    </div>
+
+                    <!-- ETF 파라미터 입력 -->
+                    <div class="comparison-params" style="margin-top: -8px;">
+                        <div class="comparison-param-item" style="grid-column: 1 / -1;">
+                            <label style="font-size: 0.78em; color: #7c3aed; font-weight: 700; letter-spacing: 0.5px;">📈 달러채권 ETF</label>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>ETF 총보수 (%)</label>
+                            <input type="number" id="etfExpenseRatio" value="0.25" min="0" max="3" step="0.01" onchange="updateComparison()">
+                            <span class="param-hint">TIGER 단기채 0.15~0.30%</span>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>USD 채권 수익률 (%)</label>
+                            <input type="number" id="etfBondYield" value="4.0" min="0" max="15" step="0.1" onchange="updateComparison()">
+                            <span class="param-hint">미국채 단기 3~5%</span>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>계좌 유형</label>
+                            <select id="etfAccountType" onchange="updateEtfTaxRate()">
+                                <option value="general">일반 (15.4%)</option>
+                                <option value="isa">ISA (9.9%, 200만 비과세)</option>
+                                <option value="pension">연금저축 (3.3~5.5%)</option>
+                            </select>
+                            <span class="param-hint">계좌에 따라 세율 변경</span>
+                        </div>
+                        <div class="comparison-param-item">
+                            <label>세율 (%)</label>
+                            <input type="number" id="etfTaxRate" value="15.4" min="0" max="50" step="0.1" onchange="updateComparison()">
+                            <span class="param-hint">계좌 유형에 따라 자동 변경</span>
                         </div>
                     </div>
 
@@ -2133,6 +2174,7 @@
 
                     <div class="small-text" style="margin-top: 20px;">
                         ※ 은행: 환전수수료 차감 후 달러예금 월복리 적용, 만기 시 이자소득세 공제<br>
+                        ※ ETF: 국내상장 달러채권 ETF, 환전수수료 없음, (채권수익률-총보수) 월복리, 계좌별 세금<br>
                         ※ 보험: 원화고정납입 메커니즘, 약정이자+공시이율 복리, 10년 유지 시 비과세
                     </div>
                 </div>
