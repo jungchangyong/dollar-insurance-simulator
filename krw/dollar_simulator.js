@@ -17,8 +17,8 @@ class DollarInvestmentSimulator {
 
         // 프리셋 정의
         this.presets = {
-            standard: { totalPeriodYears: 10, interval: 'monthly', dollarPremium: 300, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 0, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200 },
-            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 10, holdingPeriodYears: 5, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 50000, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200 }
+            standard: { totalPeriodYears: 10, interval: 'monthly', dollarPremium: 300, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 0, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200, insuredAmount: 0, enrollmentType: 'simple', maintenanceBonus1: 0, maintenanceBonus2: 0 },
+            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 10, holdingPeriodYears: 5, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 50000, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200, insuredAmount: 0, enrollmentType: 'simple', maintenanceBonus1: 0, maintenanceBonus2: 0 }
         };
 
         this.initializeDate();
@@ -91,6 +91,11 @@ class DollarInvestmentSimulator {
                 };
                 desc.textContent = descs[strategyEl.value] || descs.monthly;
             });
+        }
+        // 가입유형 설명 동적 업데이트
+        const enrollmentEl = document.getElementById('enrollmentType');
+        if (enrollmentEl) {
+            enrollmentEl.addEventListener('change', () => this.updateEnrollmentTypeDesc());
         }
         // 초기 필드 표시/숨김
         this.toggleDollarPremiumFields();
@@ -324,7 +329,11 @@ class DollarInvestmentSimulator {
             reserveInterestRate: parseFloat(document.getElementById('reserveInterestRate').value),
             additionalBudget: parseFloat(document.getElementById('additionalBudget').value) || 0,
             additionalStrategy: document.getElementById('additionalStrategy')?.value || 'monthly',
-            additionalPremiumLimitPct: parseFloat(document.getElementById('additionalPremiumLimitPct').value) || 200
+            additionalPremiumLimitPct: parseFloat(document.getElementById('additionalPremiumLimitPct').value) || 200,
+            insuredAmount: parseFloat(document.getElementById('insuredAmount').value) || 0,
+            enrollmentType: document.getElementById('enrollmentType')?.value || 'simple',
+            maintenanceBonus1: parseFloat(document.getElementById('maintenanceBonus1').value) || 0,
+            maintenanceBonus2: parseFloat(document.getElementById('maintenanceBonus2').value) || 0
         };
     }
 
@@ -681,50 +690,44 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
-    // 은행 달러 예금 시뮬레이션
+    // 투자 시뮬레이션 공통 로직
     // ========================
-    runBankSimulation(insuranceResult) {
-        const exchangeFee = parseFloat(document.getElementById('bankExchangeFee')?.value) || 1.75;
-        const annualRate = parseFloat(document.getElementById('bankInterestRate')?.value) || 3.5;
-        const taxRate = parseFloat(document.getElementById('bankTaxRate')?.value) || 15.4;
-        const monthlyRate = Math.pow(1 + annualRate / 100, 1 / 12) - 1;
-        const feeMultiplier = 1 + exchangeFee / 100; // 환전 시 수수료 포함 환율
+    _runInvestmentSimulation(insuranceResult, options) {
+        const { monthlyRate, feeMultiplier, taxCalc } = options;
 
-        let balance = 0;        // 달러 잔액
-        let totalKrwPaid = 0;   // 총 원화 납입
-        let totalUsdPurchased = 0; // 총 달러 매수
-        let totalInterest = 0;  // 누적 이자
-        const bankHistory = [];
+        let balance = 0;
+        let totalKrwPaid = 0;
+        let totalUsdPurchased = 0;
+        let totalInterest = 0;
+        const history = [];
 
-        // 1) 납입기간: 보험과 동일 시점/금액으로 은행에서 달러 환전
+        // 1) 납입기간
         for (let i = 0; i < insuranceResult.reserveHistory.length; i++) {
             const entry = insuranceResult.reserveHistory[i];
-            const krwPaid = entry.krwPaid; // 보험에 납입한 동일 원화
+            const krwPaid = entry.krwPaid;
             const rate = entry.rate;
-            const effectiveRate = rate * feeMultiplier; // 수수료 포함 환율
 
-            // 2회차부터 기존 잔액에 월이자 적용
             if (i > 0 && balance > 0) {
                 const interest = balance * monthlyRate;
                 totalInterest += interest;
                 balance += interest;
             }
 
-            const usdBought = krwPaid / effectiveRate;
+            const usdBought = krwPaid / (rate * feeMultiplier);
             balance += usdBought;
             totalKrwPaid += krwPaid;
             totalUsdPurchased += usdBought;
 
-            bankHistory.push({
+            history.push({
                 date: new Date(entry.date),
                 rate, krwPaid, usdBought, balance,
                 interest: i > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
                 avgRate: totalKrwPaid / totalUsdPurchased,
-                phase: 'payment' // 납입기간
+                phase: 'payment'
             });
         }
 
-        // 2) 거치기간: 추가 납입 없이 이자만 적용
+        // 2) 거치기간
         const holdingMonths = Math.round(
             ((insuranceResult.holdingEndDate - insuranceResult.purchaseEndDate) / (1000 * 60 * 60 * 24 * 30.44))
         );
@@ -736,20 +739,19 @@ class DollarInvestmentSimulator {
                 balance += interest;
                 const date = new Date(holdingStart);
                 date.setMonth(date.getMonth() + m + 1);
-                bankHistory.push({
+                history.push({
                     date, rate: this.findClosestRate(date),
                     krwPaid: 0, usdBought: 0, balance,
                     interest, avgRate: totalKrwPaid / totalUsdPurchased,
-                    phase: 'holding' // 거치기간
+                    phase: 'holding'
                 });
             }
         }
 
-        // 3) 전환기간: 이자 적용 + 추가납입 동일 금액 매수
+        // 3) 전환기간
         const conversionMonths = Math.round(insuranceResult.conversionPeriodYears * 12);
         if (conversionMonths > 0) {
             const convStart = new Date(insuranceResult.holdingEndDate);
-            // 추가납입 날짜→금액 맵
             const addMap = new Map();
             if (insuranceResult.additionalHistory) {
                 for (const ah of insuranceResult.additionalHistory) {
@@ -760,14 +762,12 @@ class DollarInvestmentSimulator {
                 const date = new Date(convStart);
                 date.setMonth(date.getMonth() + m);
 
-                // 이자 적용
                 if (balance > 0) {
                     const interest = balance * monthlyRate;
                     totalInterest += interest;
                     balance += interest;
                 }
 
-                // 추가납입과 동일 금액 환전
                 const addKrw = addMap.get(date.getTime()) || 0;
                 let addUsd = 0;
                 if (addKrw > 0) {
@@ -778,18 +778,18 @@ class DollarInvestmentSimulator {
                     totalUsdPurchased += addUsd;
                 }
 
-                bankHistory.push({
+                history.push({
                     date, rate: this.findClosestRate(date),
                     krwPaid: addKrw, usdBought: addUsd, balance,
                     interest: balance > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
                     avgRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
-                    phase: 'conversion' // 전환기간
+                    phase: 'conversion'
                 });
             }
         }
 
         // 4) 만기: 세금 계산
-        const tax = totalInterest * (taxRate / 100);
+        const tax = taxCalc(totalInterest, insuranceResult.finalRate);
         const finalUsd = balance - tax;
         const finalRate = insuranceResult.finalRate;
         const finalKrw = finalUsd * finalRate;
@@ -798,42 +798,55 @@ class DollarInvestmentSimulator {
             : 0;
 
         return {
-            bankHistory,
-            totalKrwPaid,
-            totalUsdPurchased,
-            totalInterest,
-            tax,
-            finalUsd,
-            finalKrw,
-            finalRate,
-            profitRate,
-            averageRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
-            // 기간별 스냅샷 (비교 테이블용)
-            atPaymentEnd: this._bankSnapshot(bankHistory, 'payment', totalKrwPaid, taxRate),
-            atHoldingEnd: holdingMonths > 0
-                ? this._bankSnapshot(bankHistory, 'holding', totalKrwPaid, taxRate)
-                : null,
-            atMaturity: { finalUsd, finalKrw, profitRate, totalKrwPaid, tax, totalInterest }
+            history, holdingMonths,
+            totalKrwPaid, totalUsdPurchased, totalInterest,
+            tax, finalUsd, finalKrw, finalRate, profitRate,
+            averageRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0
         };
     }
 
-    // 은행 기간별 스냅샷 헬퍼
-    _bankSnapshot(history, phase, totalKrwAtThat, taxRate) {
+    // ========================
+    // 은행 달러 예금 시뮬레이션
+    // ========================
+    runBankSimulation(insuranceResult) {
+        const exchangeFee = parseFloat(document.getElementById('bankExchangeFee')?.value) || 1.75;
+        const annualRate = parseFloat(document.getElementById('bankInterestRate')?.value) || 3.5;
+        const taxRate = parseFloat(document.getElementById('bankTaxRate')?.value) || 15.4;
+        const monthlyRate = Math.pow(1 + annualRate / 100, 1 / 12) - 1;
+
+        const sim = this._runInvestmentSimulation(insuranceResult, {
+            monthlyRate,
+            feeMultiplier: 1 + exchangeFee / 100,
+            taxCalc: (interest) => interest * (taxRate / 100)
+        });
+
+        return {
+            bankHistory: sim.history,
+            totalKrwPaid: sim.totalKrwPaid,
+            totalUsdPurchased: sim.totalUsdPurchased,
+            totalInterest: sim.totalInterest,
+            tax: sim.tax,
+            finalUsd: sim.finalUsd,
+            finalKrw: sim.finalKrw,
+            finalRate: sim.finalRate,
+            profitRate: sim.profitRate,
+            averageRate: sim.averageRate,
+            atPaymentEnd: this._phaseSnapshot(sim.history, 'payment'),
+            atHoldingEnd: sim.holdingMonths > 0
+                ? this._phaseSnapshot(sim.history, 'holding')
+                : null,
+            atMaturity: { finalUsd: sim.finalUsd, finalKrw: sim.finalKrw, profitRate: sim.profitRate, totalKrwPaid: sim.totalKrwPaid, tax: sim.tax, totalInterest: sim.totalInterest }
+        };
+    }
+
+    // 기간별 스냅샷 헬퍼
+    _phaseSnapshot(history, phase) {
         const entries = history.filter(h => h.phase === phase);
         if (entries.length === 0) return null;
         const last = entries[entries.length - 1];
-        // 해당 시점까지의 총 원화 = 모든 krwPaid 합산
         let krwSum = 0;
         for (const h of history) {
             krwSum += h.krwPaid;
-            if (h === last) break;
-        }
-        // 해당 시점까지 누적 이자
-        let interestSum = 0;
-        for (const h of history) {
-            if (h.phase !== 'payment' || history.indexOf(h) > 0) {
-                // 대략적 이자 누적
-            }
             if (h === last) break;
         }
         return {
@@ -847,6 +860,117 @@ class DollarInvestmentSimulator {
     }
 
     // ========================
+    // 사망보험금 계산
+    // ========================
+    calculateDeathBenefit(config, year, paidPremiumUsd, bonusAccum, reserveUsd) {
+        if (!config.insuredAmount || config.insuredAmount <= 0) return null;
+
+        const isSimple = config.enrollmentType === 'simple';
+        const maxPct = isSimple ? 150 : 200;
+        const escalatedPct = Math.min(105 + year * 5, maxPct);
+        const escalatedAmount = config.insuredAmount * escalatedPct / 100;
+        const baseDeath = Math.max(escalatedAmount, paidPremiumUsd);
+        const totalDeath = baseDeath + bonusAccum + reserveUsd;
+
+        // 간편가입형 0~2년: 일반사망 시 50%
+        const simpleDeathWarning = isSimple && year < 2;
+
+        return {
+            year,
+            escalatedPct,
+            escalatedAmount,
+            paidPremiumUsd,
+            bonusAccum,
+            reserveUsd,
+            baseDeath,
+            totalDeath,
+            simpleDeathWarning
+        };
+    }
+
+    getDeathBenefitTimeline(insuranceResult) {
+        const config = insuranceResult.config;
+        if (!config.insuredAmount || config.insuredAmount <= 0) return [];
+
+        const purchaseYears = config.purchasePeriodYears;
+        const holdingYears = config.holdingPeriodYears;
+        const conversionYears = insuranceResult.conversionPeriodYears || 0;
+        // 저축전환 시점 = 사망보험금 소멸 시점
+        const conversionStartYear = Math.round(purchaseYears + holdingYears);
+        // 사망보험금은 전환 전까지만 유효
+        const maxYear = conversionStartYear;
+
+        // 유지보너스 발생 시점 (전환 전에만 의미)
+        const bonus1Year = Math.round(purchaseYears * 2);
+        const bonus2Year = Math.round(purchaseYears * 3);
+
+        // 기납입보험료 계산 (월납 기준)
+        const monthlyUsd = config.dollarPremium > 0 ? config.dollarPremium : 0;
+        const totalPremiumMonths = Math.round(purchaseYears * 12);
+
+        // 현재 시점 (가입일로부터의 경과 년수 근사)
+        const startDate = insuranceResult.startDate || insuranceResult.purchaseDates?.[0] || new Date();
+        const now = new Date();
+        const elapsedYears = Math.max(0, (now - new Date(startDate)) / (365.25 * 86400000));
+        const currentYear = Math.min(Math.round(elapsedYears), maxYear);
+
+        // 주요 년차 선별 (전환 시점까지만)
+        const keyYears = new Set();
+        for (const y of [0, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30]) {
+            if (y <= maxYear) keyYears.add(y);
+        }
+        keyYears.add(Math.round(purchaseYears));
+        keyYears.add(conversionStartYear);
+        if (bonus1Year <= maxYear) keyYears.add(bonus1Year);
+        if (bonus2Year <= maxYear) keyYears.add(bonus2Year);
+        if (currentYear <= maxYear) keyYears.add(currentYear);
+
+        const timeline = [];
+        let bonusAccum = 0;
+
+        for (let y = 0; y <= maxYear; y++) {
+            if (!keyYears.has(y)) continue;
+
+            // 기납입보험료 (해당 년차까지)
+            const paidMonths = Math.min(y * 12, totalPremiumMonths);
+            const paidPremiumUsd = paidMonths * monthlyUsd;
+
+            // 유지보너스 누적 (전환 전 시점에 발생한 것만)
+            if (y >= bonus1Year && bonus1Year <= maxYear) bonusAccum = config.maintenanceBonus1;
+            if (y >= bonus2Year && bonus2Year <= maxYear) bonusAccum = config.maintenanceBonus1 + config.maintenanceBonus2;
+
+            const db = this.calculateDeathBenefit(config, y, paidPremiumUsd, bonusAccum, 0);
+            if (!db) continue;
+
+            db.isCurrent = (y === currentYear);
+            db.isBonus = (y === bonus1Year || y === bonus2Year) && y <= maxYear;
+            db.isMax = (db.escalatedPct >= (config.enrollmentType === 'simple' ? 150 : 200));
+            db.phase = y < purchaseYears ? '납입' : '거치';
+            db.isConversionPoint = conversionYears > 0 && (y === conversionStartYear);
+
+            timeline.push(db);
+        }
+
+        // 전환 후 소멸 정보 추가
+        timeline.conversionStartYear = conversionStartYear;
+        timeline.hasConversion = conversionYears > 0;
+
+        return timeline;
+    }
+
+    // 사망보험금 전환 상태 판별 헬퍼
+    _getDeathBenefitStatus(insuranceResult) {
+        const tl = this.getDeathBenefitTimeline(insuranceResult);
+        const hasConversion = tl.hasConversion;
+        const startDt = insuranceResult.startDate || insuranceResult.purchaseDates?.[0] || new Date();
+        const elapsed = Math.max(0, (new Date() - new Date(startDt)) / (365.25 * 86400000));
+        const afterConversion = hasConversion && Math.round(elapsed) >= (tl.conversionStartYear || 0);
+        const current = tl.find(t => t.isCurrent) || tl[tl.length - 1];
+        const maxBenefit = current ? current.totalDeath : 0;
+        return { timeline: tl, hasConversion, afterConversion, maxBenefit };
+    }
+
+    // ========================
     // ETF 시뮬레이션
     // ========================
     runEtfSimulation(insuranceResult) {
@@ -857,153 +981,37 @@ class DollarInvestmentSimulator {
         const netAnnualRate = (bondYield - expenseRatio) / 100;
         const monthlyRate = Math.pow(1 + netAnnualRate, 1 / 12) - 1;
 
-        let balance = 0;
-        let totalKrwPaid = 0;
-        let totalUsdPurchased = 0;
-        let totalInterest = 0;
-        const etfHistory = [];
-
-        // 1) 납입기간: 보험과 동일 원화로 ETF 매수 (환전수수료 없음)
-        for (let i = 0; i < insuranceResult.reserveHistory.length; i++) {
-            const entry = insuranceResult.reserveHistory[i];
-            const krwPaid = entry.krwPaid;
-            const rate = entry.rate;
-
-            if (i > 0 && balance > 0) {
-                const interest = balance * monthlyRate;
-                totalInterest += interest;
-                balance += interest;
-            }
-
-            const usdBought = krwPaid / rate; // 환전수수료 없음
-            balance += usdBought;
-            totalKrwPaid += krwPaid;
-            totalUsdPurchased += usdBought;
-
-            etfHistory.push({
-                date: new Date(entry.date),
-                rate, krwPaid, usdBought, balance,
-                interest: i > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
-                avgRate: totalKrwPaid / totalUsdPurchased,
-                phase: 'payment'
-            });
-        }
-
-        // 2) 거치기간: 채권 이자만 복리 적용
-        const holdingMonths = Math.round(
-            ((insuranceResult.holdingEndDate - insuranceResult.purchaseEndDate) / (1000 * 60 * 60 * 24 * 30.44))
-        );
-        if (holdingMonths > 0) {
-            const holdingStart = new Date(insuranceResult.purchaseEndDate);
-            for (let m = 0; m < holdingMonths; m++) {
-                const interest = balance * monthlyRate;
-                totalInterest += interest;
-                balance += interest;
-                const date = new Date(holdingStart);
-                date.setMonth(date.getMonth() + m + 1);
-                etfHistory.push({
-                    date, rate: this.findClosestRate(date),
-                    krwPaid: 0, usdBought: 0, balance,
-                    interest, avgRate: totalKrwPaid / totalUsdPurchased,
-                    phase: 'holding'
-                });
-            }
-        }
-
-        // 3) 전환기간: 이자 적용 + 추가납입 동일 금액 매수
-        const conversionMonths = Math.round(insuranceResult.conversionPeriodYears * 12);
-        if (conversionMonths > 0) {
-            const convStart = new Date(insuranceResult.holdingEndDate);
-            const addMap = new Map();
-            if (insuranceResult.additionalHistory) {
-                for (const ah of insuranceResult.additionalHistory) {
-                    addMap.set(ah.date.getTime(), ah.krwPaid);
+        const sim = this._runInvestmentSimulation(insuranceResult, {
+            monthlyRate,
+            feeMultiplier: 1, // ETF: 환전수수료 없음
+            taxCalc: (interest, finalRate) => {
+                if (accountType === 'isa') {
+                    const taxableKrw = Math.max(0, interest * finalRate - 2000000);
+                    return (taxableKrw * 0.099) / finalRate;
                 }
+                // 일반/연금: 전체 이익 × 세율
+                return interest * (taxRate / 100);
             }
-            for (let m = 0; m < conversionMonths; m++) {
-                const date = new Date(convStart);
-                date.setMonth(date.getMonth() + m);
-
-                if (balance > 0) {
-                    const interest = balance * monthlyRate;
-                    totalInterest += interest;
-                    balance += interest;
-                }
-
-                const addKrw = addMap.get(date.getTime()) || 0;
-                let addUsd = 0;
-                if (addKrw > 0) {
-                    const rate = this.findClosestRate(date);
-                    addUsd = addKrw / rate; // 환전수수료 없음
-                    balance += addUsd;
-                    totalKrwPaid += addKrw;
-                    totalUsdPurchased += addUsd;
-                }
-
-                etfHistory.push({
-                    date, rate: this.findClosestRate(date),
-                    krwPaid: addKrw, usdBought: addUsd, balance,
-                    interest: balance > 0 ? balance * monthlyRate / (1 + monthlyRate) : 0,
-                    avgRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
-                    phase: 'conversion'
-                });
-            }
-        }
-
-        // 4) 만기: 계좌 유형별 세금 계산
-        const totalProfitKrw = totalInterest * insuranceResult.finalRate;
-        let tax = 0;
-        if (accountType === 'isa') {
-            // ISA: 200만원 비과세 + 초과분 9.9%
-            const taxableKrw = Math.max(0, totalProfitKrw - 2000000);
-            tax = (taxableKrw * 0.099) / insuranceResult.finalRate; // USD 환산
-        } else if (accountType === 'pension') {
-            // 연금저축: 전체 이익 × 세율(3.3~5.5%)
-            tax = totalInterest * (taxRate / 100);
-        } else {
-            // 일반: 전체 이익 × 15.4%
-            tax = totalInterest * (taxRate / 100);
-        }
-
-        const finalUsd = balance - tax;
-        const finalRate = insuranceResult.finalRate;
-        const finalKrw = finalUsd * finalRate;
-        const profitRate = totalKrwPaid > 0
-            ? ((finalKrw - totalKrwPaid) / totalKrwPaid) * 100
-            : 0;
+        });
 
         return {
-            etfHistory,
-            totalKrwPaid,
-            totalUsdPurchased,
-            totalInterest,
-            tax,
-            finalUsd,
-            finalKrw,
-            finalRate,
-            profitRate,
-            averageRate: totalUsdPurchased > 0 ? totalKrwPaid / totalUsdPurchased : 0,
+            etfHistory: sim.history,
+            totalKrwPaid: sim.totalKrwPaid,
+            totalUsdPurchased: sim.totalUsdPurchased,
+            totalInterest: sim.totalInterest,
+            tax: sim.tax,
+            finalUsd: sim.finalUsd,
+            finalKrw: sim.finalKrw,
+            finalRate: sim.finalRate,
+            profitRate: sim.profitRate,
+            averageRate: sim.averageRate,
             accountType,
-            atPaymentEnd: this._bankSnapshot(etfHistory, 'payment', totalKrwPaid, taxRate),
-            atHoldingEnd: holdingMonths > 0
-                ? this._bankSnapshot(etfHistory, 'holding', totalKrwPaid, taxRate)
+            atPaymentEnd: this._phaseSnapshot(sim.history, 'payment'),
+            atHoldingEnd: sim.holdingMonths > 0
+                ? this._phaseSnapshot(sim.history, 'holding')
                 : null,
-            atMaturity: { finalUsd, finalKrw, profitRate, totalKrwPaid, tax, totalInterest }
+            atMaturity: { finalUsd: sim.finalUsd, finalKrw: sim.finalKrw, profitRate: sim.profitRate, totalKrwPaid: sim.totalKrwPaid, tax: sim.tax, totalInterest: sim.totalInterest }
         };
-    }
-
-    findClosestRate(targetDate) {
-        const data = this.exchangeRateData;
-        let lo = 0, hi = data.length - 1;
-        while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (data[mid].date < targetDate) lo = mid + 1;
-            else hi = mid;
-        }
-        if (lo === 0) return data[0].rate;
-        const prev = data[lo - 1], curr = data[lo];
-        return (Math.abs(curr.date - targetDate) < Math.abs(prev.date - targetDate))
-            ? curr.rate : prev.rate;
     }
 
     findClosestIndex(targetDate) {
@@ -1017,6 +1025,16 @@ class DollarInvestmentSimulator {
         if (lo === 0) return 0;
         const prev = data[lo - 1], curr = data[lo];
         return (Math.abs(curr.date - targetDate) < Math.abs(prev.date - targetDate)) ? lo : lo - 1;
+    }
+
+    findClosestRate(targetDate) {
+        return this.exchangeRateData[this.findClosestIndex(targetDate)].rate;
+    }
+
+    // Chart.js x축 날짜 포맷 (timestamp → YYYY.MM)
+    _formatChartDate(value) {
+        const d = new Date(value);
+        return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
     // 특정 날짜 기준 SMA 계산 (과거 period일간 평균)
@@ -1376,6 +1394,98 @@ class DollarInvestmentSimulator {
             </div>`;
 
         html += `</div>`; // money-flow 끝
+
+        // 사망보험금 섹션
+        const deathConfig = result.config;
+        if (deathConfig.insuredAmount > 0) {
+            const timeline = this.getDeathBenefitTimeline(result);
+            const lastRate = result.endRate || result.avgRate || 1300;
+            const convStartYear = timeline.conversionStartYear || 0;
+            const hasConversion = timeline.hasConversion;
+
+            // 현재 시점이 전환 전인지 확인
+            const startDate = result.startDate || result.purchaseDates?.[0] || new Date();
+            const elapsedYears = Math.max(0, (new Date() - new Date(startDate)) / (365.25 * 86400000));
+            const isAfterConversion = hasConversion && Math.round(elapsedYears) >= convStartYear;
+
+            // 현재 시점 사망보험금 찾기
+            const currentEntry = timeline.find(t => t.isCurrent) || timeline[timeline.length - 1];
+            const currentDeathUsd = currentEntry ? currentEntry.totalDeath : 0;
+            const currentDeathKrw = currentDeathUsd * lastRate;
+
+            html += `<div style="grid-column: 1 / -1;">`;
+
+            if (isAfterConversion) {
+                // 전환 후: 사망보험금 소멸 안내
+                const lastEntry = timeline[timeline.length - 1];
+                const maxDeathUsd = lastEntry ? lastEntry.totalDeath : 0;
+                html += `<div class="metric-card metric-card--death" style="margin-bottom: 1rem; opacity: 0.7;">
+                    <div class="metric-label">사망보험금 — 저축전환으로 소멸</div>
+                    <div class="metric-value" style="text-decoration: line-through; font-size: 1.5rem;">$${Math.round(maxDeathUsd).toLocaleString()}</div>
+                    <div class="metric-sub">전환 전 최대 사망보험금 (${convStartYear}년차 기준)</div>
+                    <div class="metric-sub" style="margin-top:4px; color:#ef4444;">저축전환 후에는 해약환급금(적립금)만 수령 가능</div>
+                </div>`;
+            } else {
+                // 전환 전: 현재 사망보험금 표시
+                html += `<div class="metric-card metric-card--death" style="margin-bottom: 1rem;">
+                    <div class="metric-label">사망보험금 (현재 ${currentEntry?.year || 0}년차)</div>
+                    <div class="metric-value">$${Math.round(currentDeathUsd).toLocaleString()}</div>
+                    <div class="metric-sub">${Math.round(currentDeathKrw).toLocaleString()}원 (환율 ${Math.round(lastRate).toLocaleString()}원 기준)</div>
+                </div>`;
+            }
+
+            // 간편가입형 경고
+            if (!isAfterConversion && currentEntry?.simpleDeathWarning) {
+                html += `<div style="margin-bottom: 0.75rem;">
+                    <span class="simple-warning">간편가입형 0~2년: 일반사망 시 보험금 50% 지급</span>
+                </div>`;
+            }
+
+            // 체증 타임라인 테이블
+            html += `<div style="overflow-x: auto;">
+            <table class="death-benefit-table">
+                <thead><tr>
+                    <th>년차</th>
+                    <th>구간</th>
+                    <th>체증비율</th>
+                    <th>체증금액($)</th>
+                    <th>기납입보험료($)</th>
+                    <th>유지보너스($)</th>
+                    <th>사망보험금($)</th>
+                    <th>원화환산</th>
+                </tr></thead><tbody>`;
+
+            for (const t of timeline) {
+                const rowClass = t.isCurrent ? 'current-row' : t.isBonus ? 'bonus-row' : t.isMax ? 'max-row' : '';
+                const krwValue = Math.round(t.totalDeath * lastRate);
+                const label = t.isCurrent ? ` <span style="color:var(--primary-color);">◀ 현재</span>` : '';
+                const bonusLabel = t.isBonus ? ` <span style="color:#f59e0b;">★</span>` : '';
+                const convLabel = t.isConversionPoint ? ` <span style="color:#ef4444;">⚠ 전환</span>` : '';
+
+                html += `<tr class="${rowClass}">
+                    <td>${t.year}년${label}${bonusLabel}${convLabel}</td>
+                    <td>${t.phase}</td>
+                    <td>${t.escalatedPct}%</td>
+                    <td>$${Math.round(t.escalatedAmount).toLocaleString()}</td>
+                    <td>$${Math.round(t.paidPremiumUsd).toLocaleString()}</td>
+                    <td>${t.bonusAccum > 0 ? '$' + Math.round(t.bonusAccum).toLocaleString() : '-'}</td>
+                    <td><strong>$${Math.round(t.totalDeath).toLocaleString()}</strong></td>
+                    <td>${krwValue.toLocaleString()}원</td>
+                </tr>`;
+            }
+
+            html += `</tbody></table></div>`;
+
+            // 저축전환 소멸 안내
+            if (hasConversion) {
+                html += `<div style="margin-top: 0.75rem; padding: 8px 12px; background: #fef2f2; border-left: 3px solid #ef4444; border-radius: 4px; font-size: 0.82rem; color: #991b1b;">
+                    <strong>${convStartYear}년차 저축전환 시 사망보험금 소멸</strong> — 전환 후에는 종신보험 기능이 해제되어 체증 사망보험금이 없어지고, 해약환급금(적립금)만 수령 가능합니다.
+                </div>`;
+            }
+
+            html += `</div>`; // grid-column 끝
+        }
+
         grid.innerHTML = html;
     }
 
@@ -1507,6 +1617,11 @@ class DollarInvestmentSimulator {
         document.getElementById('additionalBudget').value = p.additionalBudget || 0;
         document.getElementById('additionalStrategy').value = p.additionalStrategy || 'monthly';
         document.getElementById('additionalPremiumLimitPct').value = p.additionalPremiumLimitPct || 200;
+        document.getElementById('insuredAmount').value = p.insuredAmount || 0;
+        document.getElementById('enrollmentType').value = p.enrollmentType || 'simple';
+        document.getElementById('maintenanceBonus1').value = p.maintenanceBonus1 || 0;
+        document.getElementById('maintenanceBonus2').value = p.maintenanceBonus2 || 0;
+        this.updateEnrollmentTypeDesc();
         this.toggleDollarPremiumFields();
         this.validatePeriods();
         this.updateSimulation();
@@ -1770,10 +1885,7 @@ class DollarInvestmentSimulator {
                 position: 'bottom',
                 title: { display: true, text: '날짜' },
                 ticks: {
-                    callback: function(value) {
-                        const d = new Date(value);
-                        return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0');
-                    },
+                    callback: this._formatChartDate,
                     maxTicksLimit: 12
                 }
             },
@@ -1985,10 +2097,7 @@ class DollarInvestmentSimulator {
                         type: 'linear',
                         position: 'bottom',
                         ticks: {
-                            callback: function(value) {
-                                const d = new Date(value);
-                                return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0');
-                            },
+                            callback: this._formatChartDate,
                             maxTicksLimit: 12
                         }
                     },
@@ -2350,7 +2459,11 @@ class DollarInvestmentSimulator {
             reserveInterestRate: 'reserveInterestRate',
             additionalBudget: 'additionalBudget',
             additionalStrategy: 'additionalStrategy',
-            additionalPremiumLimitPct: 'additionalPremiumLimitPct'
+            additionalPremiumLimitPct: 'additionalPremiumLimitPct',
+            insuredAmount: 'insuredAmount',
+            enrollmentType: 'enrollmentType',
+            maintenanceBonus1: 'maintenanceBonus1',
+            maintenanceBonus2: 'maintenanceBonus2'
         };
         for (const [key, id] of Object.entries(map)) {
             if (config[key] !== undefined) {
@@ -2358,7 +2471,19 @@ class DollarInvestmentSimulator {
                 if (el) el.value = config[key];
             }
         }
+        this.updateEnrollmentTypeDesc();
         this.toggleDollarPremiumFields();
+    }
+
+    updateEnrollmentTypeDesc() {
+        const desc = document.getElementById('enrollmentTypeDesc');
+        if (!desc) return;
+        const type = document.getElementById('enrollmentType')?.value || 'simple';
+        if (type === 'simple') {
+            desc.textContent = '* 매년 5%씩 체증, 최대 150% (10년)';
+        } else {
+            desc.textContent = '* 매년 5%씩 체증, 최대 200% (20년)';
+        }
     }
 
     // ========================
@@ -2436,6 +2561,13 @@ class DollarInvestmentSimulator {
                 <div class="sub-value" style="margin-top:8px;">
                     세금: 비과세 (10년 유지)
                 </div>
+                ${ins.config.insuredAmount > 0 ? (() => {
+                    const db = this._getDeathBenefitStatus(ins);
+                    if (db.afterConversion) {
+                        return `<div class="sub-value" style="margin-top:8px; color: #999;">사망보험금: 전환 후 소멸</div>`;
+                    }
+                    return `<div class="sub-value" style="margin-top:8px; color: #ef4444; font-weight:600;">사망보험금: $${Math.round(db.maxBenefit).toLocaleString()}</div>`;
+                })() : ''}
             </div>
             <div class="comparison-card comparison-card--result">
                 <h3>${winner.icon} ${winner.name} 우위</h3>
@@ -2781,6 +2913,24 @@ class DollarInvestmentSimulator {
                             <td class="etf-col" style="font-weight:600; color: ${etf.profitRate >= 0 ? '#059669' : '#dc2626'}">${fmtPct(etf.profitRate)}</td>
                             <td class="ins-col ${ins.profitRate >= 0 ? 'diff-positive' : 'diff-negative'}">${fmtPct(ins.profitRate)}</td>
                         </tr>
+                        ${ins.config.insuredAmount > 0 ? (() => {
+                            const db = this._getDeathBenefitStatus(ins);
+                            if (db.afterConversion) {
+                                return `<tr style="background: rgba(239,68,68,0.05);">
+                                    <td><strong>사망 시 수령액</strong></td>
+                                    <td class="bank-col">${fmtUsd(bank.finalUsd)} (예금잔액)</td>
+                                    <td class="etf-col">${fmtUsd(etf.finalUsd)} (ETF잔액)</td>
+                                    <td class="ins-col" style="color:#999;">적립금 = ${fmtUsd(ins.totalUnits + (ins.additionalTotalCompounded || 0))} (전환 후)</td>
+                                </tr>`;
+                            }
+                            const deathKrw = db.maxBenefit * ins.finalRate;
+                            return `<tr style="background: rgba(239,68,68,0.05);">
+                                <td><strong>사망 시 수령액</strong></td>
+                                <td class="bank-col">${fmtUsd(bank.finalUsd)} (예금잔액)</td>
+                                <td class="etf-col">${fmtUsd(etf.finalUsd)} (ETF잔액)</td>
+                                <td class="ins-col" style="color:#ef4444; font-weight:700;">$${fmt(Math.round(db.maxBenefit))} (${fmt(Math.round(deathKrw))}원)</td>
+                            </tr>`;
+                        })() : ''}
                     </tbody>
                 </table>
             </div>

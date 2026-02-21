@@ -683,6 +683,41 @@
         .metric-card--rate::before { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
         .metric-card--final::before { background: linear-gradient(135deg, #10b981, #059669); }
         .metric-card--diff::before { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .metric-card--death::before { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+
+        .death-benefit-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            margin-top: 0.5rem;
+        }
+        .death-benefit-table th {
+            background: var(--bg-secondary);
+            padding: 6px 8px;
+            text-align: right;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .death-benefit-table th:first-child { text-align: center; }
+        .death-benefit-table td {
+            padding: 5px 8px;
+            text-align: right;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .death-benefit-table td:first-child { text-align: center; font-weight: 600; }
+        .death-benefit-table .bonus-row { background: rgba(245, 158, 11, 0.08); }
+        .death-benefit-table .current-row { background: rgba(59, 130, 246, 0.1); font-weight: 600; }
+        .death-benefit-table .max-row { background: rgba(239, 68, 68, 0.06); }
+        .simple-warning {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
 
         .metric-label {
             font-size: 0.82em;
@@ -1951,6 +1986,36 @@
                     <label for="compoundRate">전환 후 공시이율 (%)</label>
                     <input type="number" id="compoundRate" value="4.3" step="0.1" onchange="updateSimulation()">
                     <div class="small-text">* 저축전환 기간 중 연복리 적용</div>
+                </div>
+
+                <hr class="section-divider">
+                <div class="section-label">사망보험금 설정</div>
+
+                <div class="form-group">
+                    <label for="insuredAmount">가입금액 (USD)</label>
+                    <input type="number" id="insuredAmount" value="0" step="1000" min="0" onchange="updateSimulation()">
+                    <div class="small-text">* 0이면 사망보험금 비표시</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="enrollmentType">가입유형</label>
+                    <select id="enrollmentType" onchange="updateSimulation()">
+                        <option value="simple">간편가입형 (10년/150%)</option>
+                        <option value="standard">일반가입형 (20년/200%)</option>
+                    </select>
+                    <div class="small-text" id="enrollmentTypeDesc">* 매년 5%씩 체증, 최대 150% (10년)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maintenanceBonus1">1차 유지보너스 (USD)</label>
+                    <input type="number" id="maintenanceBonus1" value="0" step="100" min="0" onchange="updateSimulation()">
+                    <div class="small-text">* 납입기간 × 2 시점 지급</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maintenanceBonus2">2차 유지보너스 (USD)</label>
+                    <input type="number" id="maintenanceBonus2" value="0" step="100" min="0" onchange="updateSimulation()">
+                    <div class="small-text">* 납입기간 × 3 시점 지급</div>
                 </div>
 
                 <hr class="section-divider">

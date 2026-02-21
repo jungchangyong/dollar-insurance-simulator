@@ -20,9 +20,18 @@ python -m http.server 8080
 
 ## 아키텍처
 
-- **`krw/dollar_simulator.html` + `krw/dollar_simulator.js`** — 바닐라 JS + Chart.js. CSV(1990~2025.03) + Frankfurter API(ECB, 최신) 환율 데이터. localStorage 캐시.
+- **`krw/dollar_simulator.html` + `krw/dollar_simulator.js`** (~3,030줄) — 바닐라 JS + Chart.js. CSV(1990~2025.03) + Frankfurter API(ECB, 최신) 환율 데이터. localStorage 캐시.
 - **`krw/krw.csv`** — 1990년부터의 KRW/USD 종가 환율 이력. 컬럼: `기간`(YYYY-MM-DD), `환율(종가)`. UTF-8 BOM.
 - **`krw/index.html`** — 한국 상속세/증여세 세법 비교 테이블 (참고용, 시뮬레이터와 무관).
+
+### 주요 내부 메서드 (리팩토링 후)
+
+- `_runInvestmentSimulation(insuranceResult, options)` — 은행/ETF 공통 시뮬레이션 (납입→거치→전환 3단계). options: `{ monthlyRate, feeMultiplier, taxCalc }`
+- `runBankSimulation` / `runEtfSimulation` — 위 공통함수의 래퍼 (파라미터만 다름)
+- `_phaseSnapshot(history, phase)` — 기간별 스냅샷 (비교 테이블용)
+- `findClosestIndex(targetDate)` — 이진 탐색 기본. `findClosestRate`는 이를 호출
+- `_getDeathBenefitStatus(insuranceResult)` — 사망보험금 전환 상태 판별 (`{ afterConversion, maxBenefit }`)
+- `_formatChartDate(value)` — Chart.js x축 날짜 포맷 (YYYY.MM)
 
 ## 핵심 시뮬레이션 로직
 
