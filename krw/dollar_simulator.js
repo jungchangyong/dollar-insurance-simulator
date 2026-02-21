@@ -41,23 +41,50 @@ class DollarInvestmentSimulator {
     // ========================
     // 인증
     // ========================
-    authenticate() {
-        const passwordInput = document.getElementById('passwordInput');
+    authenticate(password) {
+        const pwd = password || document.getElementById('passwordInput').value;
         const authError = document.getElementById('authError');
-        if (passwordInput.value === this.PASSWORD) {
+        if (pwd === this.PASSWORD) {
             this.authenticated = true;
             document.getElementById('authOverlay').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
             this.initialize();
-        } else {
+            return true;
+        } else if (!password) {
             authError.innerHTML = '<div class="error">암호가 틀렸습니다.</div>';
         }
+        return false;
+    }
+
+    tryAutoAuth() {
+        const params = new URLSearchParams(window.location.search);
+        const key = params.get('key');
+        if (key) {
+            if (this.authenticate(key)) {
+                // URL에서 key 파라미터 제거 (보안)
+                const url = new URL(window.location);
+                url.searchParams.delete('key');
+                window.history.replaceState({}, '', url);
+                return true;
+            }
+        }
+        // 세션 기반 자동인증 (같은 탭에서 새로고침 시)
+        if (sessionStorage.getItem('sim_auth') === 'true') {
+            return this.authenticate(this.PASSWORD);
+        }
+        return false;
     }
 
     async initialize() {
+        sessionStorage.setItem('sim_auth', 'true');
+        // PT 모드 버튼 표시
+        const ptBtn = document.getElementById('ptModeBtn');
+        if (ptBtn) ptBtn.style.display = 'flex';
         this.updateLastUpdateTime();
         await this.loadExchangeRateData();
         this.initPeriodSlider();
+        // URL에서 고객 프리셋 파라미터 로드
+        this.loadFromUrlParams();
         this.updateSimulation();
     }
 
@@ -81,13 +108,13 @@ class DollarInvestmentSimulator {
                 const desc = document.getElementById('strategyDesc');
                 if (!desc) return;
                 const descs = {
-                    monthly: '* 저축전환 기간 중 매월 균등 납입',
-                    ma_cross: '* 60일 이동평균이 120일선 아래일 때만 매수 (환율 하락 추세)',
-                    below_avg: '* 현재 환율이 평균 매입가 이하일 때만 매수 (저점 매수)',
-                    value_avg: '* 가치평균법: 목표 대비 부족분만큼 투자, 저환율 시 자동 증액',
-                    front_loaded: '* 초기 집중: 앞쪽에 70% 집중 투입, 복리 효과 극대화',
-                    grid: '* 환율 구간별 차등 매수: 저환율 3배, 고환율 0.5배',
-                    core_satellite: '* 코어(60%) 즉시 일시납 + 새틀라이트(40%) 매월 분산'
+                    monthly: '* 저축전환 기간 동안 매월 같은 금액을 납입',
+                    ma_cross: '* 환율이 하락 추세일 때만 매수하여 저점 포착',
+                    below_avg: '* 현재 환율이 그동안 평균보다 낮을 때만 매수',
+                    value_avg: '* 목표 금액에 맞춰 자동으로 매수량 조절 (저환율 시 더 많이)',
+                    front_loaded: '* 초기에 70% 집중 투입하여 복리 효과 극대화',
+                    grid: '* 환율 구간에 따라 차등 매수 (저환율 3배, 고환율 0.5배)',
+                    core_satellite: '* 60%는 즉시 일시납, 40%는 매월 분산 투입'
                 };
                 desc.textContent = descs[strategyEl.value] || descs.monthly;
             });
@@ -125,31 +152,43 @@ class DollarInvestmentSimulator {
     // ========================
     // 데이터 로딩: CSV + Frankfurter API
     // ========================
+    showLoadingProgress(message) {
+        const el = document.getElementById('loadingProgress');
+        if (el) {
+            el.style.display = 'flex';
+            el.querySelector('.loading-progress-text').textContent = message;
+        }
+    }
+
+    hideLoadingProgress() {
+        const el = document.getElementById('loadingProgress');
+        if (el) el.style.display = 'none';
+    }
+
     async loadExchangeRateData() {
         if (this.csvLoaded && this.exchangeRateData.length > 0) return;
         try {
-            // 1) CSV 로드 (과거 데이터)
+            this.showLoadingProgress('환율 데이터를 불러오는 중...');
             await this.loadCsvData();
-            // 2) API로 최신 데이터 병합
+            this.showLoadingProgress('최신 환율을 확인하는 중...');
             await this.fetchApiData();
             this.lastUpdate = new Date();
             this.updateLastUpdateTime();
+            this.hideLoadingProgress();
         } catch (error) {
-            console.error('환율 데이터 로드 실패:', error);
-            // CSV만이라도 있으면 계속 동작
+            this.hideLoadingProgress();
             if (this.exchangeRateData.length > 0) {
-                console.warn('API 연결 실패, CSV 데이터만 사용합니다.');
                 this.lastUpdate = new Date();
                 this.updateLastUpdateTime();
             } else {
-                this.showError('환율 데이터를 불러올 수 없습니다. 로컬 서버에서 실행해주세요: python -m http.server 8080');
+                this.showError('환율 데이터를 불러올 수 없습니다. 인터넷 연결을 확인해 주세요.');
             }
         }
     }
 
     async loadCsvData() {
         if (window.location.protocol === 'file:') {
-            throw new Error('file:// 프로토콜에서는 CSV를 로드할 수 없습니다. python -m http.server 8080 으로 실행해주세요.');
+            throw new Error('웹 서버를 통해 접속해 주세요. 직접 파일 열기로는 실행할 수 없습니다.');
         }
         const response = await fetch('krw.csv');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -208,7 +247,7 @@ class DollarInvestmentSimulator {
         // Frankfurter API 호출 (1순위)
         try {
             const url = `https://api.frankfurter.dev/v1/${startStr}..${todayStr}?base=USD&symbols=KRW`;
-            const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+            const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
             if (!res.ok) throw new Error(`Frankfurter HTTP ${res.status}`);
             const data = await res.json();
             if (data.rates && Object.keys(data.rates).length > 0) {
@@ -228,7 +267,7 @@ class DollarInvestmentSimulator {
 
         // ExchangeRate-API 폴백 (2순위, 최신 1건만)
         try {
-            const res = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(8000) });
+            const res = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(3000) });
             if (!res.ok) throw new Error(`ER-API HTTP ${res.status}`);
             const data = await res.json();
             if (data.result === 'success' && data.rates?.KRW) {
@@ -300,15 +339,14 @@ class DollarInvestmentSimulator {
             this.lastResult = result;
             this.updateSummaryBanner(result);
             this.updateResultsTab(result);
-            this.updateStrategyComparison(result);
+            await this.updateStrategyComparison(result);
             this.updateTimeline(result);
             this.updateChartTab(result);
             this.updateScheduleTab(result);
             this.updateComparisonTab(result);
             this.updatePeriodInfo();
         } catch (error) {
-            console.error('시뮬레이션 오류:', error);
-            this.showError(`시뮬레이션 오류: ${error.message}`);
+            this.showError('시뮬레이션 중 문제가 발생했습니다. 설정값을 확인해 주세요.');
         }
     }
 
@@ -1205,9 +1243,11 @@ class DollarInvestmentSimulator {
         const profitClass = result.profitRate >= 0 ? 'positive' : 'negative';
         const profitSign = result.profitRate >= 0 ? '+' : '';
 
-        let text = `${intervalKo} ${Math.round(result.fixedKrw).toLocaleString()}원 고정납입 (보험료 $${cfg.dollarPremium}, 할증 ${cfg.fixedPaymentMultiplier}%) × ${cfg.purchasePeriodYears}년 → 총 $${Math.round(result.totalDollarPurchased).toLocaleString()} 납입, 적립금 $${Math.round(result.finalReserveBalance).toLocaleString()}`;
+        const customerName = document.getElementById('customerName')?.value;
+        const namePrefix = customerName ? `<strong>${customerName}</strong> 고객님 | ` : '';
+        let text = `${namePrefix}${intervalKo} ${Math.round(result.fixedKrw).toLocaleString()}원 고정납입 (보험료 $${cfg.dollarPremium}) × ${cfg.purchasePeriodYears}년 → 총 $${Math.round(result.totalDollarPurchased).toLocaleString()} 납입`;
         if (result.additionalHistory.length > 0) {
-            const strategyNames = { monthly: '정액', ma_cross: 'MA돌파', below_avg: '저점매수', value_avg: '가치평균', front_loaded: '초기집중', grid: '구간매수', core_satellite: '코어+위성' };
+            const strategyNames = { monthly: '균등', ma_cross: '하락추세', below_avg: '저점매수', value_avg: '목표맞춤', front_loaded: '초기집중', grid: '구간매수', core_satellite: '일시납+분산' };
             const sName = strategyNames[result.additionalStrategy] || '정액';
             text += `, 추가납입(${sName}) ${result.additionalHistory.length}회 → $${Math.round(result.additionalTotalCompounded).toLocaleString()}`;
         }
@@ -1492,11 +1532,10 @@ class DollarInvestmentSimulator {
     // ========================
     // 전략 비교 테이블
     // ========================
-    updateStrategyComparison(currentResult) {
+    async updateStrategyComparison(currentResult) {
         const section = document.getElementById('strategyComparisonSection');
         if (!section) return;
 
-        // 추가납입 예산이 없으면 숨김
         const budget = currentResult.config.additionalBudget || 0;
         if (budget <= 0 || currentResult.conversionPeriodYears <= 0) {
             section.style.display = 'none';
@@ -1504,21 +1543,34 @@ class DollarInvestmentSimulator {
         }
 
         const strategies = [
-            { key: 'monthly', name: '정액 납입' },
-            { key: 'ma_cross', name: 'MA돌파' },
-            { key: 'below_avg', name: '저점매수' },
-            { key: 'value_avg', name: '가치평균법' },
-            { key: 'front_loaded', name: '초기집중' },
-            { key: 'grid', name: '구간매수' },
-            { key: 'core_satellite', name: '코어+위성' }
+            { key: 'monthly', name: '매월 균등' },
+            { key: 'ma_cross', name: '하락추세 매수' },
+            { key: 'below_avg', name: '저점 매수' },
+            { key: 'value_avg', name: '목표 맞춤' },
+            { key: 'front_loaded', name: '초기 집중' },
+            { key: 'grid', name: '구간별 차등' },
+            { key: 'core_satellite', name: '일시납+분산' }
         ];
 
         const el = document.getElementById('additionalStrategy');
         const currentStrategy = el.value;
-        const results = [];
 
-        for (const s of strategies) {
+        // 프로그레스 표시
+        section.style.display = 'block';
+        section.innerHTML = `<div class="strategy-comparison">
+            <h3>📊 추가납입 전략 비교</h3>
+            <div style="display:flex; align-items:center; gap:12px; padding:16px; background:var(--color-gray-50); border-radius:var(--radius-md);">
+                <div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0;flex-shrink:0;"></div>
+                <span id="strategyProgressText" style="font-size:0.9em; color:var(--color-gray-600);">전략 비교 계산 중... (0/${strategies.length})</span>
+            </div>
+        </div>`;
+
+        const results = [];
+        // 비동기 순차 처리 (UI 프리징 방지)
+        for (let i = 0; i < strategies.length; i++) {
+            const s = strategies[i];
             el.value = s.key;
+            await new Promise(resolve => setTimeout(resolve, 0)); // UI 업데이트 기회
             const r = this.runSimulation();
             results.push({
                 ...s,
@@ -1531,12 +1583,12 @@ class DollarInvestmentSimulator {
                 avgRate: r.finalAveragePrice,
                 totalProfit: r.finalValue - r.totalInvestment
             });
+            const prog = document.getElementById('strategyProgressText');
+            if (prog) prog.textContent = `전략 비교 계산 중... (${i + 1}/${strategies.length})`;
         }
 
-        // 원래 전략 복원 (UI 재갱신 없이)
         el.value = currentStrategy;
 
-        // 만기 자산 내림차순 정렬 (절대 금액 기준이 실질적으로 유의미)
         results.sort((a, b) => b.finalValue - a.finalValue);
         const bestKey = results[0].key;
 
@@ -1572,11 +1624,10 @@ class DollarInvestmentSimulator {
         });
 
         html += `</tbody></table>`;
-        html += `<div class="strategy-note">* 동일 설정에서 전략만 변경하여 비교. 환율 데이터 기간에 따라 결과가 달라질 수 있습니다.</div>`;
+        html += `<div class="strategy-note">* 동일 설정에서 전략만 변경하여 비교합니다.</div>`;
         html += `</div>`;
 
         section.innerHTML = html;
-        section.style.display = 'block';
     }
 
     // ========================
@@ -2426,11 +2477,171 @@ class DollarInvestmentSimulator {
     // ========================
     downloadConfig() {
         const config = this.getConfig();
+        config.customerName = document.getElementById('customerName')?.value || '';
+        const customerName = config.customerName || '설정';
+        const dateStr = new Date().toISOString().split('T')[0];
         const blob = new Blob([JSON.stringify(config, null, 4)], { type: 'application/json' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'investment_config.json';
+        link.download = `시뮬레이션_${customerName}_${dateStr}.json`;
         link.click();
+    }
+
+    shareAsUrl() {
+        const config = this.getConfig();
+        const customerName = document.getElementById('customerName')?.value || '';
+        const params = new URLSearchParams();
+        params.set('key', this.PASSWORD);
+        if (customerName) params.set('name', customerName);
+        // 핵심 설정만 URL에 포함 (짧게 유지)
+        const shortKeys = {
+            totalPeriodYears: 'tp', dollarPremium: 'dp', fixedPaymentMultiplier: 'fm',
+            purchasePeriodYears: 'pp', holdingPeriodYears: 'hp',
+            interestRate: 'ir', compoundRate: 'cr', reserveInterestRate: 'ri',
+            additionalBudget: 'ab', additionalStrategy: 'as',
+            insuredAmount: 'ia', interval: 'iv'
+        };
+        for (const [full, short] of Object.entries(shortKeys)) {
+            const val = config[full];
+            if (val !== undefined && val !== null && val !== '') {
+                params.set(short, val);
+            }
+        }
+        const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        navigator.clipboard.writeText(url).then(() => {
+            this.showToast('공유 링크가 클립보드에 복사되었습니다');
+        }).catch(() => {
+            prompt('아래 링크를 복사하세요:', url);
+        });
+    }
+
+    loadFromUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.size < 2) return; // key만 있으면 기본 설정 유지
+        const shortKeys = {
+            tp: 'timeRange', dp: 'dollarPremium', fm: 'fixedPaymentMultiplier',
+            pp: 'purchasePeriod', hp: 'holdingPeriod',
+            ir: 'interestRate', cr: 'compoundRate', ri: 'reserveInterestRate',
+            ab: 'additionalBudget', as: 'additionalStrategy',
+            ia: 'insuredAmount', iv: 'interval'
+        };
+        for (const [short, elemId] of Object.entries(shortKeys)) {
+            const val = params.get(short);
+            if (val !== null) {
+                const el = document.getElementById(elemId);
+                if (el) el.value = val;
+            }
+        }
+        const name = params.get('name');
+        if (name) {
+            const nameEl = document.getElementById('customerName');
+            if (nameEl) nameEl.value = name;
+        }
+        this.toggleDollarPremiumFields();
+    }
+
+    async exportPdf() {
+        if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
+            this.showToast('PDF 라이브러리를 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
+            return;
+        }
+        this.showToast('PDF 생성 중...');
+        try {
+            const { jsPDF } = jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageW = 210, margin = 10, contentW = pageW - margin * 2;
+            let y = margin;
+
+            // 제목
+            const customerName = document.getElementById('customerName')?.value || '';
+            pdf.setFontSize(18);
+            pdf.setFont(undefined, 'bold');
+            pdf.text(`달러종신보험 시뮬레이션 리포트`, margin, y + 8);
+            y += 14;
+            if (customerName) {
+                pdf.setFontSize(13);
+                pdf.text(`${customerName} 고객님`, margin, y);
+                y += 8;
+            }
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`생성일: ${new Date().toLocaleDateString('ko-KR')}`, margin, y);
+            y += 10;
+
+            // 결과 탭 캡처
+            const resultsTab = document.getElementById('resultsTab');
+            if (resultsTab) {
+                const canvas = await html2canvas(resultsTab, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                const imgH = (canvas.height / canvas.width) * contentW;
+                const maxH = 280 - y;
+                const finalH = Math.min(imgH, maxH);
+                pdf.addImage(imgData, 'JPEG', margin, y, contentW, finalH);
+                y += finalH + 5;
+            }
+
+            // 차트 캡처 (새 페이지)
+            const chartCanvas = document.getElementById('priceChart');
+            if (chartCanvas) {
+                pdf.addPage();
+                y = margin;
+                pdf.setFontSize(14);
+                pdf.setFont(undefined, 'bold');
+                pdf.text('환율 추이 차트', margin, y + 6);
+                y += 12;
+                const imgData = chartCanvas.toDataURL('image/jpeg', 0.9);
+                const imgH = (chartCanvas.height / chartCanvas.width) * contentW;
+                pdf.addImage(imgData, 'JPEG', margin, y, contentW, Math.min(imgH, 120));
+            }
+
+            // 면책 문구
+            pdf.setFontSize(8);
+            pdf.setFont(undefined, 'normal');
+            pdf.setTextColor(150);
+            pdf.text('* 본 시뮬레이션은 과거 데이터 기반 참고용이며, 실제 수익을 보장하지 않습니다.', margin, 285);
+
+            const fileName = customerName ? `시뮬레이션_${customerName}.pdf` : '시뮬레이션_리포트.pdf';
+            pdf.save(fileName);
+            this.showToast('PDF가 저장되었습니다');
+        } catch (e) {
+            this.showToast('PDF 생성 중 오류가 발생했습니다');
+        }
+    }
+
+    async exportResultImage() {
+        if (typeof html2canvas === 'undefined') {
+            this.showToast('이미지 라이브러리를 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
+            return;
+        }
+        const resultsTab = document.getElementById('resultsTab');
+        if (!resultsTab) return;
+        this.showToast('이미지 생성 중...');
+        try {
+            const canvas = await html2canvas(resultsTab, { scale: 2, backgroundColor: '#ffffff' });
+            const link = document.createElement('a');
+            const customerName = document.getElementById('customerName')?.value || '결과';
+            link.download = `시뮬레이션_${customerName}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            this.showToast('이미지가 저장되었습니다');
+        } catch (e) {
+            this.showToast('이미지 생성 중 오류가 발생했습니다');
+        }
+    }
+
+    showToast(message) {
+        const toast = document.createElement('div');
+        toast.textContent = message;
+        Object.assign(toast.style, {
+            position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
+            background: 'var(--color-primary-800)', color: 'white', padding: '12px 24px',
+            borderRadius: 'var(--radius-full)', fontSize: '0.9em', fontWeight: '600',
+            boxShadow: 'var(--shadow-lg)', zIndex: '10000', animation: 'fadeInUp 0.3s ease-out',
+            fontFamily: 'inherit'
+        });
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2000);
+        setTimeout(() => toast.remove(), 2500);
     }
 
     uploadConfig(event) {
@@ -2960,15 +3171,14 @@ class DollarInvestmentSimulator {
     }
 
     updateLastUpdateTime() {
-        const now = new Date();
         const last = this.exchangeRateData.length > 0
             ? this.exchangeRateData[this.exchangeRateData.length - 1].date.toISOString().split('T')[0].replace(/-/g, '.')
             : '?';
-        const source = this.apiSource
-            ? `krw.csv + ${this.apiSource}`
-            : 'krw.csv';
-        document.getElementById('lastUpdate').textContent =
-            `데이터: ${source} (1990.03 ~ ${last}) | ${now.toLocaleString('ko-KR')}`;
+        const sourceLabel = this.apiSource ? '실시간' : '과거 데이터';
+        const el = document.getElementById('lastUpdate');
+        el.textContent = `환율 기준: ${last} (${sourceLabel})`;
+        el.style.color = this.apiSource ? 'var(--color-success)' : 'var(--color-gray-400)';
+        el.style.fontWeight = '600';
     }
 
     showLoading() {
@@ -2988,13 +3198,20 @@ class DollarInvestmentSimulator {
 // 전역 함수 (HTML onclick)
 // ========================
 let simulator;
-window.addEventListener('DOMContentLoaded', () => { simulator = new DollarInvestmentSimulator(); });
+window.addEventListener('DOMContentLoaded', () => {
+    simulator = new DollarInvestmentSimulator();
+    // URL 파라미터 자동인증 시도
+    simulator.tryAutoAuth();
+});
 
 function authenticate() { simulator.authenticate(); }
 function updateSimulation() { simulator.updateSimulation(); }
 function showTab(tabName) { simulator.showTab(tabName); }
 function calculateTarget() { simulator.calculateTarget(); }
 function downloadConfig() { simulator.downloadConfig(); }
+function shareAsUrl() { simulator.shareAsUrl(); }
+function exportPdf() { simulator.exportPdf(); }
+function exportResultImage() { simulator.exportResultImage(); }
 function uploadConfig(event) { simulator.uploadConfig(event); }
 function applyPreset(type, event) { simulator.applyPreset(type, event); }
 function toggleSidebar() { simulator.toggleSidebar(); }
@@ -3019,6 +3236,26 @@ function updateComparison() {
     if (simulator && simulator.lastResult) {
         simulator.updateComparisonTab(simulator.lastResult);
     }
+}
+function togglePtMode() {
+    document.body.classList.toggle('pt-mode');
+    const btn = document.getElementById('ptModeBtn');
+    const isPt = document.body.classList.contains('pt-mode');
+    btn.textContent = isPt ? '✕' : '🎤';
+    btn.title = isPt ? '프레젠테이션 모드 끄기' : '프레젠테이션 모드';
+    // 차트 리사이즈
+    if (simulator.chart) setTimeout(() => simulator.chart.resize(), 100);
+    if (simulator.macdChart) setTimeout(() => simulator.macdChart.resize(), 100);
+}
+function toggleAdvancedSettings() {
+    const ids = ['advancedPremiumSettings', 'advancedRateSettings'];
+    const btn = document.getElementById('advancedToggleBtn');
+    const isHidden = document.getElementById('advancedPremiumSettings').style.display === 'none';
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isHidden ? 'block' : 'none';
+    });
+    btn.textContent = isHidden ? '⚙ 상세 설정 접기 ▴' : '⚙ 상세 설정 보기 ▾';
 }
 function updateEtfTaxRate() {
     const type = document.getElementById('etfAccountType')?.value;

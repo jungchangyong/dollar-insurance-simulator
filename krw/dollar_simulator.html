@@ -6,6 +6,8 @@
     <title>달러종신보험 시뮬레이터</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" defer></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14'>💵</text></svg>">
     <style>
@@ -1679,17 +1681,18 @@
         .quick-btn {
             flex: 1;
             min-width: 0;
-            padding: 5px 2px;
+            padding: 8px 4px;
             border: 1px solid var(--color-gray-200);
             border-radius: var(--radius-full);
             background: white;
             color: var(--color-gray-600);
-            font-size: 0.72em;
+            font-size: 0.78em;
             font-weight: 600;
             cursor: pointer;
             transition: all var(--transition-fast);
             white-space: nowrap;
             font-family: inherit;
+            min-height: 36px;
         }
 
         .quick-btn:hover {
@@ -1813,6 +1816,8 @@
                 padding: 8px 6px;
             }
 
+            #ptModeBtn { bottom: 90px !important; right: 24px !important; }
+
             .summary-banner {
                 font-size: 0.88em;
                 padding: 14px 16px;
@@ -1835,6 +1840,51 @@
                 padding: 20px;
             }
         }
+        /* ========================
+         * 인쇄 최적화
+         * ======================== */
+        @media print {
+            .sidebar, .sidebar-toggle, .sidebar-overlay, #ptModeBtn, .warning-box,
+            .export-buttons, .config-section, .tabs, .auth-overlay, #loadingProgress { display: none !important; }
+            .main-layout { grid-template-columns: 1fr !important; }
+            .tab-content { display: block !important; padding: 16px !important; }
+            .tab-content:not(.active) { display: none !important; }
+            body { background: white !important; }
+            .content { box-shadow: none !important; border: none !important; }
+            .summary-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+
+        /* ========================
+         * PT 모드 (프레젠테이션)
+         * ======================== */
+        body.pt-mode .sidebar { display: none !important; }
+        body.pt-mode .sidebar-toggle { display: none !important; }
+        body.pt-mode .sidebar-overlay { display: none !important; }
+        body.pt-mode .warning-box { display: none !important; }
+        body.pt-mode .main-layout { grid-template-columns: 1fr !important; }
+        body.pt-mode .header h1 { font-size: 2.8em; }
+        body.pt-mode .summary-banner { font-size: 1.15em; padding: 24px 32px; }
+        body.pt-mode .metric-value { font-size: 2.2em; }
+        body.pt-mode .metric-card { padding: 28px 32px; }
+        body.pt-mode .tab-content { padding: 40px; }
+        body.pt-mode .chart-container { height: 600px; }
+        body.pt-mode #ptModeBtn { background: linear-gradient(135deg,#ef4444,#b91c1c) !important; }
+        body.pt-mode .container { max-width: 1400px; }
+
+        /* ========================
+         * 태블릿 (768~1024px)
+         * ======================== */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .main-layout { grid-template-columns: 260px 1fr; gap: 20px; }
+            .sidebar { padding: 20px; }
+            .sidebar h3 { font-size: 1em; }
+            .form-group label { font-size: 0.82em; }
+            .form-group input, .form-group select { padding: 8px 12px; font-size: 13px; }
+            .tab { font-size: 12px; padding: 10px 8px; }
+            .chart-container { height: 400px; }
+            .metric-value { font-size: 1.5em; }
+            .quick-btn { padding: 8px 4px; font-size: 0.78em; min-height: 36px; }
+        }
     </style>
 </head>
 <body>
@@ -1854,6 +1904,14 @@
     <!-- 모바일 사이드바 오버레이 -->
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
     <button class="sidebar-toggle" onclick="toggleSidebar()" title="설정 열기">⚙</button>
+    <!-- PT 모드 토글 -->
+    <button id="ptModeBtn" onclick="togglePtMode()" title="프레젠테이션 모드" style="display:none; position:fixed; bottom:24px; right:90px; width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; font-size:22px; cursor:pointer; box-shadow:var(--shadow-lg); z-index:99; transition:all var(--transition-base);">🎤</button>
+
+    <!-- 데이터 로딩 프로그레스 -->
+    <div id="loadingProgress" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.92); backdrop-filter:blur(4px); z-index:999; justify-content:center; align-items:center; flex-direction:column; gap:16px;">
+        <div class="spinner"></div>
+        <div class="loading-progress-text" style="color:var(--color-primary-800); font-weight:600; font-size:1em;">환율 데이터를 불러오는 중...</div>
+    </div>
 
     <!-- 메인 컨텐츠 -->
     <div class="container" id="mainContent" style="display: none;">
@@ -1867,12 +1925,18 @@
         <div id="summaryBanner" class="summary-banner"></div>
 
         <div class="warning-box">
-            ⚠️ 1990년 3월~2025년 3월은 krw.csv, 이후 최신 데이터는 Frankfurter API(ECB)에서 매일 자동 갱신됩니다. 범위 밖의 날짜 선택 시 자동으로 시작일이 조정됩니다.
+            ⚠️ 환율 데이터: 1990년 3월 이후 한국은행 공식 종가 데이터를 사용하며, 최신 환율은 유럽중앙은행(ECB)에서 매일 자동 갱신됩니다.
         </div>
 
         <div class="main-layout">
             <aside class="sidebar">
                 <h3>시뮬레이션 설정</h3>
+
+                <!-- 고객명 -->
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label for="customerName">고객명</label>
+                    <input type="text" id="customerName" placeholder="예: 홍길동" style="font-size:14px;">
+                </div>
 
                 <!-- 프리셋 -->
                 <div class="preset-buttons">
@@ -1936,17 +2000,19 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="fixedPaymentMultiplier">환율 할증률 (%)</label>
-                    <input type="number" id="fixedPaymentMultiplier" value="110" step="10" min="110" max="130" onchange="updateSimulation()">
-                    <div class="small-text">* 원화납입보험료 = 보험료(USD) × 기준환율 × 할증률</div>
-                    <div class="small-text" id="calculatedFixedKrw" style="color: #003b70; font-weight: 600;"></div>
-                </div>
+                <div id="advancedPremiumSettings" style="display:none;">
+                    <div class="form-group">
+                        <label for="fixedPaymentMultiplier">원화 납입 환율 우대폭 (%)</label>
+                        <input type="number" id="fixedPaymentMultiplier" value="110" step="10" min="110" max="130" onchange="updateSimulation()">
+                        <div class="small-text">* 원화납입보험료 = 보험료(USD) × 기준환율 × 우대폭</div>
+                        <div class="small-text" id="calculatedFixedKrw" style="color: #003b70; font-weight: 600;"></div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="reserveInterestRate">적립금 부리이율 (%)</label>
-                    <input type="number" id="reserveInterestRate" value="3.25" step="0.05" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 적립금에 연복리 적용</div>
+                    <div class="form-group">
+                        <label for="reserveInterestRate">적립금 이자율 (%)</label>
+                        <input type="number" id="reserveInterestRate" value="3.25" step="0.05" min="0" onchange="updateSimulation()">
+                        <div class="small-text">* 환율 차액으로 쌓인 적립금에 연복리 적용</div>
+                    </div>
                 </div>
 
                 <hr class="section-divider">
@@ -1973,49 +2039,51 @@
                     <input type="number" id="holdingPeriod" value="3" step="0.5" min="0" onchange="updateSimulation()">
                 </div>
 
-                <hr class="section-divider">
-                <div class="section-label">이율 설정</div>
+                <div id="advancedRateSettings" style="display:none;">
+                    <hr class="section-divider">
+                    <div class="section-label">이율 설정</div>
 
-                <div class="form-group">
-                    <label for="interestRate">약정이율 (%)</label>
-                    <input type="number" id="interestRate" value="24.8" step="0.1" onchange="updateSimulation()">
-                    <div class="small-text">* 거치기간 종료 시 기본보험료에 1회 적용</div>
-                </div>
+                    <div class="form-group">
+                        <label for="interestRate">약정이율 (%)</label>
+                        <input type="number" id="interestRate" value="24.8" step="0.1" onchange="updateSimulation()">
+                        <div class="small-text">* 거치기간 종료 시 기본보험료에 1회 적용</div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="compoundRate">전환 후 공시이율 (%)</label>
-                    <input type="number" id="compoundRate" value="4.3" step="0.1" onchange="updateSimulation()">
-                    <div class="small-text">* 저축전환 기간 중 연복리 적용</div>
-                </div>
+                    <div class="form-group">
+                        <label for="compoundRate">저축전환 후 이율 (%)</label>
+                        <input type="number" id="compoundRate" value="4.3" step="0.1" onchange="updateSimulation()">
+                        <div class="small-text">* 저축전환 기간 중 연복리 적용 (공시이율)</div>
+                    </div>
 
-                <hr class="section-divider">
-                <div class="section-label">사망보험금 설정</div>
+                    <hr class="section-divider">
+                    <div class="section-label">사망보험금 설정</div>
 
-                <div class="form-group">
-                    <label for="insuredAmount">가입금액 (USD)</label>
-                    <input type="number" id="insuredAmount" value="0" step="1000" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 0이면 사망보험금 비표시</div>
-                </div>
+                    <div class="form-group">
+                        <label for="insuredAmount">가입금액 (USD)</label>
+                        <input type="number" id="insuredAmount" value="0" step="1000" min="0" onchange="updateSimulation()">
+                        <div class="small-text">* 0이면 사망보험금 비표시</div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="enrollmentType">가입유형</label>
-                    <select id="enrollmentType" onchange="updateSimulation()">
-                        <option value="simple">간편가입형 (10년/150%)</option>
-                        <option value="standard">일반가입형 (20년/200%)</option>
-                    </select>
-                    <div class="small-text" id="enrollmentTypeDesc">* 매년 5%씩 체증, 최대 150% (10년)</div>
-                </div>
+                    <div class="form-group">
+                        <label for="enrollmentType">가입유형</label>
+                        <select id="enrollmentType" onchange="updateSimulation()">
+                            <option value="simple">간편가입형 (10년/150%)</option>
+                            <option value="standard">일반가입형 (20년/200%)</option>
+                        </select>
+                        <div class="small-text" id="enrollmentTypeDesc">* 매년 5%씩 체증, 최대 150% (10년)</div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="maintenanceBonus1">1차 유지보너스 (USD)</label>
-                    <input type="number" id="maintenanceBonus1" value="0" step="100" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 납입기간 × 2 시점 지급</div>
-                </div>
+                    <div class="form-group">
+                        <label for="maintenanceBonus1">1차 유지보너스 (USD)</label>
+                        <input type="number" id="maintenanceBonus1" value="0" step="100" min="0" onchange="updateSimulation()">
+                        <div class="small-text">* 납입기간 × 2 시점 지급</div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="maintenanceBonus2">2차 유지보너스 (USD)</label>
-                    <input type="number" id="maintenanceBonus2" value="0" step="100" min="0" onchange="updateSimulation()">
-                    <div class="small-text">* 납입기간 × 3 시점 지급</div>
+                    <div class="form-group">
+                        <label for="maintenanceBonus2">2차 유지보너스 (USD)</label>
+                        <input type="number" id="maintenanceBonus2" value="0" step="100" min="0" onchange="updateSimulation()">
+                        <div class="small-text">* 납입기간 × 3 시점 지급</div>
+                    </div>
                 </div>
 
                 <hr class="section-divider">
@@ -2024,13 +2092,13 @@
                 <div class="form-group" id="additionalStrategyGroup" style="display:none;">
                     <label for="additionalStrategy">추가납입 전략</label>
                     <select id="additionalStrategy" onchange="updateSimulation()">
-                        <option value="monthly">매월 정액 납입</option>
-                        <option value="ma_cross">MA 하향돌파 매수 (60/120일)</option>
-                        <option value="below_avg">평균 매입가 이하 매수</option>
-                        <option value="value_avg">가치평균법 (Value Averaging)</option>
-                        <option value="front_loaded">시간가중 초기집중</option>
-                        <option value="grid">환율 구간매수 (Grid)</option>
-                        <option value="core_satellite">코어+새틀라이트 (60/40)</option>
+                        <option value="monthly">매월 균등 납입</option>
+                        <option value="ma_cross">환율 하락 추세 구간 매수</option>
+                        <option value="below_avg">평균보다 저렴할 때 매수</option>
+                        <option value="value_avg">목표 금액 맞춤 자동 조절</option>
+                        <option value="front_loaded">초기 집중 납입</option>
+                        <option value="grid">환율 구간별 차등 매수</option>
+                        <option value="core_satellite">초기 일시납 + 매월 분산</option>
                     </select>
                     <div class="small-text" id="strategyDesc">* 저축전환 기간 중 매월 균등 납입</div>
                 </div>
@@ -2053,10 +2121,18 @@
                     <div class="small-text">* 해약환급금 대비 추가납입 최대 한도</div>
                 </div>
 
+                <hr class="section-divider">
+                <button onclick="toggleAdvancedSettings()" id="advancedToggleBtn" style="width:100%; padding:10px; border:1.5px dashed var(--color-gray-300); border-radius:var(--radius-md); background:var(--color-gray-50); color:var(--color-gray-600); cursor:pointer; font-size:0.85em; font-weight:600; font-family:inherit; transition:all var(--transition-fast); margin-bottom:16px;">
+                    ⚙ 상세 설정 보기 ▾
+                </button>
+
                 <div class="config-section">
-                    <h3>설정 저장/불러오기</h3>
+                    <h3>설정 저장/공유</h3>
                     <div class="form-group">
-                        <button class="button" onclick="downloadConfig()" style="width:100%;">현재 설정 다운로드</button>
+                        <button class="button" onclick="shareAsUrl()" style="width:100%; background:linear-gradient(135deg,#059669,#10b981);">🔗 공유 링크 복사</button>
+                    </div>
+                    <div class="form-group">
+                        <button class="button secondary" onclick="downloadConfig()" style="width:100%;">현재 설정 다운로드</button>
                     </div>
                     <div class="form-group">
                         <div class="file-input-wrapper">
@@ -2087,6 +2163,10 @@
                         납입 기간: - | 유지 기간: - | 저축전환 기간: -
                     </div>
                     <div id="strategyComparisonSection" style="display:none;"></div>
+                    <div class="export-buttons" style="margin-top:20px;">
+                        <button class="button small" onclick="exportPdf()">📄 PDF 리포트 저장</button>
+                        <button class="button small secondary" onclick="exportResultImage()">🖼 결과 이미지 저장</button>
+                    </div>
                 </div>
 
                 <!-- 탭2: 차트 -->
@@ -2108,7 +2188,7 @@
                         <button class="button small" onclick="exportAsImage()">차트 이미지 저장</button>
                         <button class="button small secondary" onclick="exportAsCSV()">스케줄 CSV 다운로드</button>
                     </div>
-                    <div class="small-text" style="margin-top:15px;">데이터: 한국은행(1990~2025.03) + Frankfurter API/ECB(최신)</div>
+                    <div class="small-text" style="margin-top:15px;">데이터: 한국은행 공식 종가(1990~) + 유럽중앙은행 실시간(최신)</div>
                 </div>
 
                 <!-- 탭3: 납입 스케줄 -->
