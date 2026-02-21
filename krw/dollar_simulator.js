@@ -3239,11 +3239,15 @@ function updateComparison() {
 }
 function togglePtMode() {
     document.body.classList.toggle('pt-mode');
-    const btn = document.getElementById('ptModeBtn');
     const isPt = document.body.classList.contains('pt-mode');
-    btn.textContent = isPt ? '✕' : '🎤';
-    btn.title = isPt ? '프레젠테이션 모드 끄기' : '프레젠테이션 모드';
-    // 차트 리사이즈
+    const icon = document.getElementById('ptModeIcon');
+    if (icon) {
+        icon.innerHTML = isPt
+            ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+            : '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>';
+    }
+    const btn = document.getElementById('ptModeBtn');
+    if (btn) btn.title = isPt ? '일반 모드로 돌아가기' : '프레젠테이션 모드';
     if (simulator.chart) setTimeout(() => simulator.chart.resize(), 100);
     if (simulator.macdChart) setTimeout(() => simulator.macdChart.resize(), 100);
 }
