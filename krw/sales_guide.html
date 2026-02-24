@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>달러종신보험 상담 가이드</title>
+<style>
+  :root {
+    --primary: #1a365d;
+    --primary-light: #2b6cb0;
+    --accent: #dd6b20;
+    --accent-light: #ed8936;
+    --green: #276749;
+    --green-light: #48bb78;
+    --red: #9b2c2c;
+    --gray-50: #f7fafc;
+    --gray-100: #edf2f7;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e0;
+    --gray-500: #718096;
+    --gray-700: #4a5568;
+    --gray-800: #2d3748;
+    --gray-900: #1a202c;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--gray-800); background: var(--gray-50);
+    line-height: 1.6; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* --- HEADER --- */
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: white; padding: 32px 0; text-align: center;
+  }
+  .header h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .header p { font-size: 14px; opacity: 0.85; }
+  .header .badges { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  .header .badge {
+    background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25);
+    padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+
+  /* --- LAYOUT --- */
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .two-col { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
+
+  /* --- FLOW CHART --- */
+  .flow-section { margin-bottom: 28px; }
+  .flow-section h2 { font-size: 18px; color: var(--primary); margin-bottom: 14px; font-weight: 700; }
+  .flow {
+    display: flex; gap: 0; align-items: stretch; flex-wrap: wrap;
+  }
+  .flow-step {
+    flex: 1; min-width: 140px; position: relative; text-align: center;
+    padding: 16px 10px 14px; border-radius: var(--radius);
+    background: white; border: 2px solid var(--gray-200); box-shadow: var(--shadow);
+  }
+  .flow-step::after {
+    content: ''; position: absolute; right: -14px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0; border-left: 10px solid var(--gray-300);
+    border-top: 8px solid transparent; border-bottom: 8px solid transparent; z-index: 1;
+  }
+  .flow-step:last-child::after { display: none; }
+  .flow-step .step-num {
+    display: inline-block; width: 26px; height: 26px; line-height: 26px;
+    border-radius: 50%; background: var(--primary); color: white;
+    font-size: 13px; font-weight: 700; margin-bottom: 6px;
+  }
+  .flow-step .step-title { font-size: 13px; font-weight: 700; color: var(--gray-900); }
+  .flow-step .step-time { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+  .flow-step .step-desc { font-size: 11px; color: var(--gray-700); margin-top: 6px; line-height: 1.5; }
+
+  /* --- SCENARIO --- */
+  .scenario-section { margin-bottom: 28px; }
+  .scenario-section h2 { font-size: 18px; color: var(--primary); margin-bottom: 14px; font-weight: 700; }
+  .scenarios { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .scenario-card {
+    background: white; border-radius: var(--radius); padding: 20px;
+    box-shadow: var(--shadow); border-left: 4px solid;
+  }
+  .scenario-card.a { border-left-color: var(--primary-light); }
+  .scenario-card.b { border-left-color: var(--accent); }
+  .scenario-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .scenario-card h3 .label {
+    display: inline-block; padding: 2px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 700; color: white;
+  }
+  .scenario-card.a h3 .label { background: var(--primary-light); }
+  .scenario-card.b h3 .label { background: var(--accent); }
+  .scenario-card .timeline {
+    display: flex; align-items: center; gap: 0; margin: 12px 0; font-size: 11px;
+  }
+  .scenario-card .tl-block {
+    flex: 1; text-align: center; padding: 8px 4px;
+    border-radius: 4px; font-weight: 600;
+  }
+  .scenario-card .tl-arrow { color: var(--gray-400); font-size: 16px; margin: 0 2px; flex-shrink: 0; }
+  .scenario-card.a .tl-block:nth-child(1) { background: #ebf4ff; color: var(--primary); }
+  .scenario-card.a .tl-block:nth-child(3) { background: #e6fffa; color: #234e52; }
+  .scenario-card.b .tl-block:nth-child(1) { background: #ebf4ff; color: var(--primary); }
+  .scenario-card.b .tl-block:nth-child(3) { background: #e6fffa; color: #234e52; }
+  .scenario-card.b .tl-block:nth-child(5) { background: #fffaf0; color: #7b341e; }
+  .scenario-card .result {
+    background: var(--gray-50); border-radius: 6px; padding: 10px 14px; margin-top: 10px;
+    font-size: 12px; line-height: 1.7;
+  }
+  .scenario-card .result strong { color: var(--gray-900); }
+
+  /* --- STAGE CARDS --- */
+  .stage-section { margin-bottom: 20px; }
+  .stage-card {
+    background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .stage-header {
+    display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+    cursor: pointer; user-select: none; border-bottom: 1px solid var(--gray-100);
+  }
+  .stage-header:hover { background: var(--gray-50); }
+  .stage-header .num {
+    width: 32px; height: 32px; line-height: 32px; text-align: center;
+    border-radius: 50%; background: var(--primary); color: white;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+  }
+  .stage-header .title { font-size: 15px; font-weight: 700; color: var(--gray-900); }
+  .stage-header .time {
+    margin-left: auto; font-size: 12px; color: var(--gray-500);
+    background: var(--gray-100); padding: 3px 10px; border-radius: 12px;
+  }
+  .stage-header .arrow { margin-left: 8px; font-size: 14px; color: var(--gray-400); transition: transform 0.2s; }
+  .stage-card.open .stage-header .arrow { transform: rotate(180deg); }
+  .stage-body { padding: 0 20px 20px; display: none; }
+  .stage-card.open .stage-body { display: block; }
+
+  /* --- CONTENT INSIDE STAGES --- */
+  .substep { margin-top: 16px; }
+  .substep-title {
+    font-size: 13px; font-weight: 700; color: var(--primary-light);
+    margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .substep-title::before { content: ''; width: 3px; height: 14px; background: var(--primary-light); border-radius: 2px; }
+  .talk { margin: 8px 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; }
+  .talk.agent { background: #ebf8ff; border-left: 3px solid var(--primary-light); }
+  .talk.customer { background: #fff5f5; border-left: 3px solid #e53e3e; }
+  .talk .role { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+  .talk.agent .role { color: var(--primary-light); }
+  .talk.customer .role { color: #e53e3e; }
+  .tip {
+    background: #fffff0; border: 1px solid #ecc94b; border-radius: 6px;
+    padding: 10px 14px; margin-top: 10px; font-size: 12px; line-height: 1.6;
+  }
+  .tip::before { content: '💡 '; }
+  .branch {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+  }
+  .branch-item {
+    background: var(--gray-50); border-radius: 6px; padding: 10px 12px; font-size: 12px; line-height: 1.6;
+  }
+  .branch-item .cond { font-weight: 700; color: var(--primary); margin-bottom: 4px; font-size: 11px; }
+
+  .killer-quote {
+    background: linear-gradient(135deg, #ebf4ff 0%, #e6fffa 100%);
+    border-radius: 8px; padding: 14px 18px; margin: 10px 0;
+    font-size: 14px; font-weight: 600; color: var(--primary);
+    border-left: 4px solid var(--primary-light); line-height: 1.6;
+  }
+
+  /* --- SIDEBAR --- */
+  .sidebar { position: sticky; top: 20px; }
+  .sidebar-card {
+    background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px; margin-bottom: 16px;
+  }
+  .sidebar-card h3 {
+    font-size: 14px; font-weight: 700; color: var(--primary);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--gray-100);
+  }
+  .num-table { width: 100%; border-collapse: collapse; }
+  .num-table td { padding: 6px 0; font-size: 12px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+  .num-table td:first-child { color: var(--gray-500); width: 45%; }
+  .num-table td:last-child { font-weight: 700; color: var(--gray-900); text-align: right; }
+
+  /* --- OBJECTION TABLE --- */
+  .objection-grid { display: grid; gap: 10px; }
+  .objection-item {
+    background: white; border-radius: 8px; padding: 14px 16px;
+    box-shadow: var(--shadow); border-left: 3px solid var(--accent);
+  }
+  .objection-item .q {
+    font-size: 13px; font-weight: 700; color: var(--red); margin-bottom: 8px;
+    display: flex; align-items: flex-start; gap: 6px;
+  }
+  .objection-item .q::before { content: 'Q'; background: var(--red); color: white; padding: 1px 6px; border-radius: 3px; font-size: 11px; flex-shrink: 0; }
+  .objection-item .a { font-size: 12px; color: var(--gray-700); line-height: 1.7; }
+  .objection-item .a strong { color: var(--primary); }
+
+  /* --- CHECKLIST --- */
+  .checklist { list-style: none; }
+  .checklist li {
+    padding: 6px 0; font-size: 12px; display: flex; align-items: flex-start; gap: 8px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .checklist li::before {
+    content: ''; width: 16px; height: 16px; border: 2px solid var(--gray-300);
+    border-radius: 3px; flex-shrink: 0; margin-top: 2px;
+  }
+
+  /* --- DONT TABLE --- */
+  .dont-list { list-style: none; }
+  .dont-list li {
+    padding: 8px 0; font-size: 12px; display: flex; align-items: flex-start; gap: 8px;
+    border-bottom: 1px solid var(--gray-100); line-height: 1.6;
+  }
+  .dont-list li::before {
+    content: '✕'; color: white; background: var(--red); width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+  }
+
+  /* --- COMPARISON TABLE --- */
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  .compare-table th {
+    background: var(--primary); color: white; padding: 8px 10px;
+    text-align: left; font-weight: 600; font-size: 11px;
+  }
+  .compare-table td { padding: 8px 10px; border-bottom: 1px solid var(--gray-200); }
+  .compare-table tr:nth-child(even) td { background: var(--gray-50); }
+  .compare-table .highlight { color: var(--primary); font-weight: 700; }
+
+  /* --- PRINT --- */
+  @media print {
+    body { background: white; font-size: 11px; }
+    .header { padding: 16px 0; }
+    .header h1 { font-size: 22px; }
+    .container { padding: 10px; }
+    .two-col { grid-template-columns: 1fr 280px; gap: 16px; }
+    .stage-card.open .stage-body { display: block; }
+    .stage-body { display: block !important; }
+    .sidebar { position: static; }
+    .flow-step { min-width: 100px; padding: 10px 6px; }
+    .no-print { display: none; }
+    .stage-card, .sidebar-card, .scenario-card, .objection-item { break-inside: avoid; }
+  }
+
+  @media (max-width: 900px) {
+    .two-col { grid-template-columns: 1fr; }
+    .sidebar { position: static; }
+    .flow { flex-wrap: wrap; }
+    .flow-step { min-width: 45%; margin-bottom: 8px; }
+    .flow-step::after { display: none; }
+    .scenarios { grid-template-columns: 1fr; }
+    .branch { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<div class="header">
+  <h1>메트라이프 달러종신보험 상담 가이드</h1>
+  <p>7년납 + 3년 유지 | 설계사 교육 + 현장 실전</p>
+  <div class="badges">
+    <span class="badge">60분 심층 상담</span>
+    <span class="badge">니즈 창출형</span>
+    <span class="badge">시뮬레이터 연동</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ===== FLOW CHART ===== -->
+<div class="flow-section">
+  <h2>상담 흐름</h2>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-title">라포 형성</div>
+      <div class="step-time">10분</div>
+      <div class="step-desc">재무 상황 파악<br>보험 얘기 금지</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-title">니즈 환기</div>
+      <div class="step-time">15분</div>
+      <div class="step-desc">3가지 질문으로<br>문제 인식시키기</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-title">솔루션 제시</div>
+      <div class="step-time">15분</div>
+      <div class="step-desc">시나리오 A/B<br>이중 선택 제시</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-title">시뮬레이터</div>
+      <div class="step-time">10분</div>
+      <div class="step-desc">고객 조건 입력<br>A→B 실시간 비교</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-title">반론 처리</div>
+      <div class="step-time">5분</div>
+      <div class="step-desc">인정 + 관점 전환<br>7가지 대응</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-title">클로징</div>
+      <div class="step-time">5분</div>
+      <div class="step-desc">제안서 or<br>결과 이미지 전송</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SCENARIOS ===== -->
+<div class="scenario-section">
+  <h2>두 가지 시나리오</h2>
+  <div class="scenarios">
+    <div class="scenario-card a">
+      <h3><span class="label">A</span> 안전하게 원금 지키기</h3>
+      <div class="timeline">
+        <div class="tl-block">납입 7년</div>
+        <span class="tl-arrow">→</span>
+        <div class="tl-block">유지 3년</div>
+      </div>
+      <div class="result">
+        <strong>10년+1일:</strong> 유지보너스 24.8% → <strong>환급률 124.8%</strong><br>
+        <strong>비과세 조건:</strong> 10년 유지 = 정확히 충족<br>
+        <strong>선택지:</strong> 해약(달러 수령) / 저축전환 / 연금전환
+      </div>
+    </div>
+    <div class="scenario-card b">
+      <h3><span class="label">B</span> 적극적으로 자산 불리기</h3>
+      <div class="timeline">
+        <div class="tl-block">납입 7년</div>
+        <span class="tl-arrow">→</span>
+        <div class="tl-block">유지 3년</div>
+        <span class="tl-arrow">→</span>
+        <div class="tl-block">전환 10년</div>
+      </div>
+      <div class="result">
+        <strong>20년 시점:</strong> 공시이율(현재 4.29%, 변동 가능) 달러 복리 10년<br>
+        <strong>추가납입:</strong> 기본보험료의 200%까지, 비과세<br>
+        <strong>활용:</strong> 연금 인출 / 생활자금 / 상속 재원
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN + SIDEBAR ===== -->
+<div class="two-col">
+<div class="main-col">
+
+<!-- ===== STAGE 1 ===== -->
+<div class="stage-card open">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">1</div>
+    <div class="title">라포 형성 & 상황 파악</div>
+    <div class="time">10분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="substep">
+      <div class="substep-title">아이스브레이킹</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        오늘은 뭔가를 결정하시라는 자리가 아니라, 요즘 많은 분들이 관심 가지시는 재테크 방법 하나를 편하게 알아보시는 자리예요.
+      </div>
+      <div class="tip">핵심: "결정하시라는 자리가 아닙니다"로 심리적 부담을 낮춘다.</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">상황 파악 (4가지 확인)</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        요즘 뉴스 보시면 환율 얘기 많이 나오잖아요. 관심 있으세요?<br>
+        지금 저축이나 투자는 어떤 걸 하고 계세요?<br>
+        혹시 달러로 된 자산은 있으세요?<br>
+        가족분들은 어떻게 되세요?
+      </div>
+      <div class="branch">
+        <div class="branch-item">
+          <div class="cond">파악 포인트</div>
+          ① 원화 자산 비중 (보통 90~100%)<br>
+          ② 가족 구성 (배우자, 자녀)<br>
+          ③ 월 저축 가능 금액<br>
+          ④ 현재 보험 가입 현황
+        </div>
+        <div class="branch-item">
+          <div class="cond">전환 멘트</div>
+          "제가 오늘 여쭤본 것들이 한 가지로 연결이 돼요. 잠깐 재미있는 질문 세 개만 드려도 될까요?"
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STAGE 2 ===== -->
+<div class="stage-card">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">2</div>
+    <div class="title">니즈 환기 — 3가지 질문</div>
+    <div class="time">15분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="substep">
+      <div class="substep-title">질문 ① 원화 집중 리스크</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        고객님 자산이 대부분 원화잖아요. 월급, 예금, 부동산 전부. 삼성전자 주식만 100% 갖고 있으면 위험하다고 하잖아요. 우리 자산이 원화 100%라는 건 <strong>한국 경제 하나에 올인</strong>하고 있는 거랑 같아요.
+      </div>
+      <div class="killer-quote">
+        "환율이 2020년 1,100원대에서 지금 1,400원대. 4년 만에 원화 가치가 약 25% 떨어졌어요. 1억이 달러로는 7,800만원 가치밖에 안 되는 거죠."
+      </div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">질문 ② 은행 예금의 한계</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        은행 예금 이자에 세금 15.4%, 금융소득 2,000만원 넘으면 종합소득세까지. 물가 고려하면 실질 수익 거의 0.<br><br>
+        특히 <strong>달러 예금은 금리가 0.05~0.1%</strong>예요. 미국 금리는 4.25%인데, 한국 은행은 환율 안정을 위해 금감원 지도로 금리를 대폭 내렸거든요. 한국에서 달러를 은행에 넣으면 사실상 이자가 0%.<br><br>
+        그런데 달러 기준으로 <strong>4%대 이자 + 비과세</strong>가 되는 방법이 있어요.
+      </div>
+      <div class="talk customer">
+        <div class="role">고객 (예상 반응)</div>
+        비과세요? 그런 게 있어요?
+      </div>
+      <div class="tip">여기서 상품을 바로 꺼내지 않는다. "좀 있다 말씀드릴게요"로 궁금증 유지.</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">질문 ③ 가족 보장 공백 / 노후 자금</div>
+      <div class="branch">
+        <div class="branch-item">
+          <div class="cond">가족 있는 경우</div>
+          "만약의 경우 가족 생활비는? 월 500만원이면 10년에 6억. 지금 그 정도 보장이 있으세요?"<br><br>
+          → "사망 보장 + 살아 있을 때 달러 저축, 둘 다 되면요?"
+        </div>
+        <div class="branch-item">
+          <div class="cond">1인 가구</div>
+          "은퇴 후 생활비는? 국민연금 월 100~150만원으로 충분하세요?"<br><br>
+          → "달러로 연금 준비하면 원화 가치 떨어져도 연금이 커져요."
+        </div>
+      </div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">니즈 연결 — 전환점</div>
+      <div class="killer-quote">
+        "정리하면요. ① 원화 100%는 리스크, ② 은행 예금은 세금에 갉아먹힘, ③ 가족 보장이 부족.<br>
+        이 세 가지를 <strong>한 번에 해결하는 방법</strong>이 있어요. 보고 싶으세요?"
+      </div>
+      <div class="tip">고객이 "뭔데요?"라고 물으면 니즈 환기 성공. 이후 상품 설명은 "판매"가 아니라 "해결책 제시".</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STAGE 3 ===== -->
+<div class="stage-card">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">3</div>
+    <div class="title">솔루션 제시 — 두 가지 시나리오</div>
+    <div class="time">15분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="substep">
+      <div class="substep-title">큰 그림 — "달러 통장 + 보험 + 비과세 적금"</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        메트라이프 달러종신보험이에요. 이름만 보험이에요. 실제로는:<br>
+        <strong>① 달러 통장</strong> — 매달 정해진 금액이 달러로 쌓임<br>
+        <strong>② 유지보너스</strong> — 10년 유지 시 환급률 124.8%<br>
+        <strong>③ 비과세</strong> — 10년 유지 시 이자소득세 0원<br>
+        + 기본 사망보장도 덤으로 따라옴
+      </div>
+      <div class="tip">"보험" 거부감 → "달러 자산 관리 프로그램"으로 바꿔 말해도 OK.</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">원화고정납입</div>
+      <div class="killer-quote">
+        "환율 걱정? 매달 같은 금액이에요. 100만원이면 100만원.<br>
+        환율 내려가면 → 달러가 더 많이 사짐 (적립 증가)<br>
+        환율 올라가면 → 적립금에서 자동 보충<br>
+        = <strong>자동 저점 매수 효과 (DCA)</strong>"
+      </div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">시나리오 A — "7년 내고, 3년 기다리면 124.8%"</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        <strong>7년만 내시면 돼요.</strong> 보험료 납입이 완전히 끝나요. 그리고 3년 더 유지만 하시면 — 돈은 한 푼도 안 내고 — <strong>유지보너스 24.8%</strong>를 받아요. 환급률 <strong>124.8%</strong>이에요.<br><br>
+        10년+1일 시점에서 세 가지 선택지가 생겨요:<br>
+        ① 해약 → 달러로 받기 (원금+24.8%)<br>
+        ② 저축전환 → 더 불리기 (시나리오 B)<br>
+        ③ 연금전환 → 달러 연금 받기
+      </div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">시나리오 B — "10년 더 불리면 자산이 폭발적으로 성장"</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        10년 시점에서 저축전환을 하면, 적립금에 <strong>공시이율(현재 4.29%) 달러 연복리</strong>가 붙어요. 한국 예금(2~3%)보다 훨씬 높아요. 공시이율은 시장 금리에 따라 변할 수 있지만, <strong>최저보증이율(0.7~1.0%)</strong>이 있어요.<br><br>
+        거기다 <strong>추가납입</strong>이 가능해요. 기본 보험료 총액의 200%까지. 추가 넣은 돈에도 공시이율 복리, 비과세!
+      </div>
+
+      <table class="compare-table">
+        <tr><th></th><th>시나리오 A (10년)</th><th>시나리오 B (20년)</th></tr>
+        <tr><td>납입 기간</td><td>7년</td><td>7년 (동일)</td></tr>
+        <tr><td>납입 후</td><td>3년 유지 → 해약</td><td>3년 유지 → 전환 10년</td></tr>
+        <tr><td>10년+1일 환급률</td><td class="highlight">124.8%</td><td>124.8%에서 출발</td></tr>
+        <tr><td>달러 복리</td><td>기본 이율</td><td class="highlight">공시이율(현재 4.29%) 연복리</td></tr>
+        <tr><td>추가납입</td><td>불가</td><td class="highlight">기본보험료의 200%</td></tr>
+        <tr><td>핵심 가치</td><td class="highlight">원금+24.8% 수익</td><td class="highlight">자산 증식 + 비과세</td></tr>
+      </table>
+
+      <div class="killer-quote" style="margin-top: 14px;">
+        "A는 안전하게 지키기, B는 적극적으로 불리기. 어느 쪽이 더 끌리세요?"
+      </div>
+      <div class="tip">이중 선택 클로징: "할까 말까"가 아니라 "A를 할까 B를 할까"를 고민하게 만든다.</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">차별점 — 왜 메트라이프인가</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        ① <strong>달러보험 1등</strong> — 2018년부터, 3년 연속 올해의 보험상품 수상<br>
+        ② <strong>운용 자산 5,876억 달러</strong> — 미국 150년 역사<br>
+        ③ <strong>원화고정납입</strong>을 처음 만든 곳<br>
+        ④ <strong>예금자보호 1억원</strong>까지
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STAGE 4 ===== -->
+<div class="stage-card">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">4</div>
+    <div class="title">시뮬레이터 시연</div>
+    <div class="time">10분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="substep">
+      <div class="substep-title">시나리오 A 입력</div>
+      <table class="compare-table">
+        <tr><th>항목</th><th>설정</th><th>비고</th></tr>
+        <tr><td>달러보험료</td><td>고객 답변</td><td>퀵버튼 활용</td></tr>
+        <tr><td>납입기간</td><td class="highlight">7년</td><td></td></tr>
+        <tr><td>유지기간</td><td class="highlight">3년</td><td></td></tr>
+        <tr><td>전환기간</td><td>0년</td><td>먼저 A만 보여줌</td></tr>
+        <tr><td>원화고정납입</td><td>110%</td><td>체크 ON</td></tr>
+      </table>
+      <div class="tip">PT 모드 ON → 결과 확인 → "10년 시점에 원금 회복 보이시죠?"</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">시나리오 B 전환 (핵심!)</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        자, 이제 시나리오 B를 볼게요. 전환기간을 <strong>0 → 10으로</strong> 바꿔볼게요.
+      </div>
+      <div class="killer-quote">
+        "보세요. 같은 보험료인데, 10년 더 불리기만 하면 이만큼 차이가 나요."
+      </div>
+      <div class="tip">A→B 전환을 "실시간으로" 보여주는 게 핵심. 숫자가 확 바뀌는 순간이 임팩트.</div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">추가 시연</div>
+      <div class="branch">
+        <div class="branch-item">
+          <div class="cond">차트 탭</div>
+          파란선 = 실제 환율<br>
+          주황선 = 평균 매입가<br>
+          초록 = 이익, 빨강 = 손해
+        </div>
+        <div class="branch-item">
+          <div class="cond">대안 비교 탭</div>
+          은행(금감원 지도로 이자 0.05~0.1%)<br>
+          vs 보험(공시이율 현재 4.29%, 비과세)<br>
+          "같은 달러인데 40배 차이"
+        </div>
+      </div>
+    </div>
+
+    <div class="substep">
+      <div class="substep-title">결과 저장 & 전송</div>
+      <div class="talk agent">
+        <div class="role">설계사</div>
+        고객님 성함 넣으면 맞춤 리포트로 저장해드릴 수 있어요. 시나리오 A, B 둘 다 이미지로 보내드릴게요. 집에서 가족분이랑 같이 보시기 좋을 거예요.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STAGE 5 ===== -->
+<div class="stage-card">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">5</div>
+    <div class="title">반론 처리 — 7가지 핵심 대응</div>
+    <div class="time">5분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="tip" style="margin-bottom: 14px;">패턴: "맞습니다" + "그런데" + 관점 전환. 반론은 관심의 표현이다. 은행 금리 질문 시 "금감원 행정지도"로 팩트 전달.</div>
+    <div class="objection-grid">
+
+      <div class="objection-item">
+        <div class="q">"환율이 떨어지면 어떡해요?"</div>
+        <div class="a">
+          ① <strong>달러 기준 공시이율(현재 4.29%) 복리</strong>가 환율 하락을 상쇄해요.<br>
+          ② 환율 1,000원 이하는 역사적으로 2007~2008년 짧은 기간뿐.<br>
+          ③ 원화고정납입이면 환율 하락 = <strong>같은 돈으로 달러 더 많이 사는 찬스</strong>.
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"10년을 못 뺀다고요?"</div>
+        <div class="a">
+          부동산도 몇 년 묶이잖아요. 이건 <strong>"안 빼야 불어나는 돈"</strong>이에요.<br>
+          7년 납입만 끝내면 나머지 3년은 <strong>한 푼도 안 내고 가만히</strong> 있으면 돼요.<br>
+          급하면 <strong>중도인출 가능</strong> — 해약환급금 50%, 연 12회.
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"달러 ETF가 낫지 않아요?"</div>
+        <div class="a">
+          ETF는 <strong>원금 손실 가능</strong> + 양도세 22% + 배당세 15.4%.<br>
+          이건 <strong>10년 유지 시 환급률 124.8% + 비과세 + 기본 보장</strong>.<br>
+          "공격과 수비를 같이 하는 것. <strong>둘 다 하시면 가장 좋아요.</strong>"
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"보험은 사업비가 너무 많잖아요"</div>
+        <div class="a">
+          맞아요. 그런데 <strong>10년 유지하면 유지보너스 24.8%</strong>를 받아요. 환급률 <strong>124.8%</strong>.<br>
+          저축전환 후 사업비는 <strong>거의 0%</strong>. 넣는 돈 전액 적립.
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"이미 보험 있는데요"</div>
+        <div class="a">
+          기존 보험은 원화 + 질병/상해 보장. 이건 <strong>달러 자산을 만드는</strong> 거예요.<br>
+          "원화 예금 있다고 달러 예금 안 드는 건 아니잖아요?"
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"지금 환율이 너무 높지 않아요?"</div>
+        <div class="a">
+          ① 원화고정납입은 <strong>환율 내려갈수록 이득</strong>인 구조.<br>
+          ② 1990년부터 어느 시점 가입해도 <strong>10년 유지하면 거의 다 플러스</strong>.<br>
+          "시간이 아니라 <strong>기간이 중요한 상품</strong>이에요. 7년 매월 분산 매수니까요."
+        </div>
+      </div>
+
+      <div class="objection-item">
+        <div class="q">"생각해볼게요" ← 최대 난관</div>
+        <div class="a">
+          "당연하죠! 충분히 이해하고 결정하시는 게 중요해요."<br>
+          <strong>나이 ↑ = 보험료 ↑</strong>, <strong>공시이율 4.29%는 지금이 높은 편 (변동 가능)</strong>.<br>
+          "오늘 결정 아니에요. 시뮬레이션 결과 보내드릴게요. 가족분이랑 보시고 연락주세요."
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===== STAGE 6 ===== -->
+<div class="stage-card">
+  <div class="stage-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="num">6</div>
+    <div class="title">클로징</div>
+    <div class="time">5분</div>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="stage-body">
+    <div class="branch">
+      <div class="branch-item">
+        <div class="cond">긍정 신호</div>
+        "7년납으로 실제 제안서를 뽑아드릴게요. 무료고 의무 아니에요. 이번 주 중으로 한 번 더 만나서 같이 볼까요?"
+      </div>
+      <div class="branch-item">
+        <div class="cond">고민 중</div>
+        "시뮬레이션 결과를 이미지로 보내드릴게요. 시나리오 A, B 둘 다요. 궁금한 게 생기면 카톡으로 물어보세요."
+      </div>
+    </div>
+    <div class="killer-quote" style="margin-top: 14px;">
+      "비과세, 달러 분산, 가족 보장 — 이 세 가지가 동시에 되는 상품은 많지 않아요."
+    </div>
+  </div>
+</div>
+
+</div><!-- /main-col -->
+
+<!-- ===== SIDEBAR ===== -->
+<div class="sidebar">
+
+  <div class="sidebar-card">
+    <h3>핵심 숫자 암기표</h3>
+    <table class="num-table">
+      <tr><td>납입기간</td><td>7년 (84개월)</td></tr>
+      <tr><td>유지기간</td><td>3년</td></tr>
+      <tr><td>비과세 충족</td><td>10년 (= 7+3)</td></tr>
+      <tr><td>원화고정납입</td><td>110~130%</td></tr>
+      <tr><td>10년 환급률</td><td>124.8%</td></tr>
+      <tr><td>저축전환 이율</td><td>4.29% (현재, 변동)</td></tr>
+      <tr><td>최저보증이율</td><td>0.7~1.0%</td></tr>
+      <tr><td>추가납입 한도</td><td>기본보험료의 200%</td></tr>
+      <tr><td>비과세 한도</td><td>월 150만원 이하</td></tr>
+      <tr><td>예금자보호</td><td>1억원</td></tr>
+      <tr><td>저축전환 시점</td><td>계약 후 7년~</td></tr>
+      <tr><td>중도인출</td><td>환급금 50%, 연12회</td></tr>
+      <tr><td>보험저널 수상</td><td>3년 연속</td></tr>
+    </table>
+  </div>
+
+  <div class="sidebar-card">
+    <h3>킬러 멘트</h3>
+    <table class="num-table">
+      <tr><td>시나리오 A</td><td>"7년만 내면, 3년 기다리면 124.8%"</td></tr>
+      <tr><td>시나리오 B</td><td>"거기서 10년 더 두면, 돈이 스스로 일해요"</td></tr>
+      <tr><td>은행 비교</td><td>"은행 0.1% vs 공시이율 4.29%. 40배 차이"</td></tr>
+      <tr><td>원화고정</td><td>"환율? 매달 같은 금액, 자동이체처럼"</td></tr>
+      <tr><td>비과세</td><td>"은행은 15.4% 떼가는데, 이건 0원"</td></tr>
+      <tr><td>선택 유도</td><td>"A는 안전, B는 적극. 어느 쪽?"</td></tr>
+    </table>
+  </div>
+
+  <div class="sidebar-card">
+    <h3>절대 금지</h3>
+    <ul class="dont-list">
+      <li>"환율이 오를 거예요" (환율 예측 금지)</li>
+      <li>"원금보장" 표현 사용 금지 (원화 기준 비보장, "원금 수준 회복"으로 대체)</li>
+      <li>"비과세 확정" (조건 명시 필수)</li>
+      <li>"공시이율 4.29% 확정/보장" (변동 가능, 최저보증 0.7~1.0% 안내 필수)</li>
+      <li>"이 상품이 최고" (절대 최고 금지)</li>
+      <li>금감원 유의사항 생략</li>
+      <li>타사 비방</li>
+      <li>고객 압박 ("지금 안 하면 후회")</li>
+    </ul>
+  </div>
+
+  <div class="sidebar-card">
+    <h3>시뮬레이터 팁</h3>
+    <table class="num-table">
+      <tr><td>A→B 비교</td><td>전환기간 0→10</td></tr>
+      <tr><td>보험료 고민</td><td>퀵버튼 활용</td></tr>
+      <tr><td>목표 금액</td><td>역산 탭</td></tr>
+      <tr><td>은행 비교</td><td>대안 비교 탭</td></tr>
+      <tr><td>환율 걱정</td><td>차트 손익 영역</td></tr>
+      <tr><td>결과 전송</td><td>이미지 내보내기</td></tr>
+      <tr><td>PT 모드</td><td>우하단 모니터 버튼</td></tr>
+    </table>
+  </div>
+
+  <div class="sidebar-card">
+    <h3>상담 후 체크리스트</h3>
+    <ul class="checklist">
+      <li>24시간 내 감사 메시지</li>
+      <li>시뮬레이션 결과 전송 (A, B 각각)</li>
+      <li>3일 후 후속 연락</li>
+      <li>관심 시: 7년납 제안서 작성</li>
+      <li>2주 후 가볍게 연락 (환율 뉴스)</li>
+      <li>CRM 기록</li>
+    </ul>
+  </div>
+
+  <div class="sidebar-card">
+    <h3>고객별 시나리오 추천</h3>
+    <table class="num-table">
+      <tr><td>30대 직장인</td><td>B (시간이 무기)</td></tr>
+      <tr><td>40대 가장</td><td>B (저축+자산)</td></tr>
+      <tr><td>50대 자산가</td><td>B (추가납입)</td></tr>
+      <tr><td>50~60대 은퇴</td><td>A → 연금전환</td></tr>
+      <tr><td>맞벌이 부부</td><td>B (비과세 2배)</td></tr>
+    </table>
+  </div>
+
+</div><!-- /sidebar -->
+</div><!-- /two-col -->
+
+</div><!-- /container -->
+
+<div style="text-align:center; padding: 20px; font-size: 11px; color: var(--gray-500); border-top: 1px solid var(--gray-200); margin-top: 20px;">
+  이 가이드는 교육 및 참고용 자료입니다. 실제 상담 시 금융소비자보호법 및 보험업법에 따른 설명 의무를 준수하세요.<br>
+  환율 리스크, 중도해지 손실, 비과세 조건 등 유의사항을 고객에게 충분히 설명해야 합니다.
+</div>
+
+</body>
+</html>
