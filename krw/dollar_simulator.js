@@ -1697,11 +1697,13 @@ class DollarInvestmentSimulator {
             - parseFloat(document.getElementById('holdingPeriod').value);
         const showAdditional = conversionYears > 0;
         const additionalEnabled = document.getElementById('additionalEnabled')?.checked || false;
-        // 추가납입 섹션: 전환기간 있을 때만 체크박스 표시
+        // 추가납입 구분선 + 체크박스: 전환기간 있을 때만 표시
+        const dividerEl = document.getElementById('additionalDivider');
+        if (dividerEl) dividerEl.style.display = showAdditional ? 'block' : 'none';
         const enableEl = document.getElementById('additionalEnableGroup');
         if (enableEl) enableEl.style.display = showAdditional ? 'block' : 'none';
         // 전략/예산/한도: 전환기간 있고 + 체크박스 ON일 때만 표시
-        const detailIds = ['additionalPremiumSection', 'additionalStrategyGroup', 'additionalBudgetGroup', 'additionalPremiumLimitGroup'];
+        const detailIds = ['additionalStrategyGroup', 'additionalBudgetGroup', 'additionalPremiumLimitGroup'];
         detailIds.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = (showAdditional && additionalEnabled) ? 'block' : 'none';
