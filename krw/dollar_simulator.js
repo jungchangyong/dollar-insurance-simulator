@@ -18,7 +18,7 @@ class DollarInvestmentSimulator {
         // 프리셋 정의
         this.presets = {
             standard: { totalPeriodYears: 10, interval: 'monthly', dollarPremium: 300, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 0, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200, insuredAmount: 0, enrollmentType: 'simple', maintenanceBonus1: 0, maintenanceBonus2: 0 },
-            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 10, holdingPeriodYears: 5, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 50000, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200, insuredAmount: 0, enrollmentType: 'simple', maintenanceBonus1: 0, maintenanceBonus2: 0 }
+            long: { totalPeriodYears: 20, interval: 'monthly', dollarPremium: 500, fixedPaymentMultiplier: 110, purchasePeriodYears: 7, holdingPeriodYears: 3, interestRate: 24.8, compoundRate: 4.3, reserveInterestRate: 3.25, additionalBudget: 0, additionalStrategy: 'monthly', additionalPremiumLimitPct: 200, insuredAmount: 0, enrollmentType: 'simple', maintenanceBonus1: 0, maintenanceBonus2: 0, additionalEnabled: true }
         };
 
         this.initializeDate();
@@ -337,6 +337,12 @@ class DollarInvestmentSimulator {
             }
             const result = this.runSimulation();
             this.lastResult = result;
+            // 추가납입 체크 ON + 예산 0이면 → 자동 계산된 금액을 UI에 반영
+            const additionalCb = document.getElementById('additionalEnabled');
+            const additionalBudgetEl = document.getElementById('additionalBudget');
+            if (additionalCb?.checked && additionalBudgetEl && parseFloat(additionalBudgetEl.value) === 0) {
+                additionalBudgetEl.value = Math.round(result.totalBeforeConversion);
+            }
             this.updateSummaryBanner(result);
             this.updateResultsTab(result);
             await this.updateStrategyComparison(result);
@@ -365,6 +371,7 @@ class DollarInvestmentSimulator {
             dollarPremium: parseFloat(document.getElementById('dollarPremium').value),
             fixedPaymentMultiplier: parseFloat(document.getElementById('fixedPaymentMultiplier').value),
             reserveInterestRate: parseFloat(document.getElementById('reserveInterestRate').value),
+            additionalEnabled: document.getElementById('additionalEnabled')?.checked || false,
             additionalBudget: parseFloat(document.getElementById('additionalBudget').value) || 0,
             additionalStrategy: document.getElementById('additionalStrategy')?.value || 'monthly',
             additionalPremiumLimitPct: parseFloat(document.getElementById('additionalPremiumLimitPct').value) || 200,
@@ -602,7 +609,10 @@ class DollarInvestmentSimulator {
         // ========================
         // 저축전환 후 추가납입 (전략 기반)
         // ========================
-        const additionalBudget = config.additionalBudget || 0;
+        // 추가납입: 체크박스 ON일 때만 실행
+        const additionalEnabled = config.additionalEnabled || false;
+        // 예산이 0이면 저축전환 시점 해약환급금을 자동 사용
+        const additionalBudget = additionalEnabled ? (config.additionalBudget || totalBeforeConversion) : 0;
         const additionalStrategy = config.additionalStrategy || 'monthly';
         const additionalLimitPct = (config.additionalPremiumLimitPct || 200) / 100;
         let additionalHistory = [];
@@ -1536,7 +1546,8 @@ class DollarInvestmentSimulator {
         const section = document.getElementById('strategyComparisonSection');
         if (!section) return;
 
-        const budget = currentResult.config.additionalBudget || 0;
+        const additionalEnabled = currentResult.config.additionalEnabled || false;
+        const budget = additionalEnabled ? (currentResult.config.additionalBudget || currentResult.totalBeforeConversion) : 0;
         if (budget <= 0 || currentResult.conversionPeriodYears <= 0) {
             section.style.display = 'none';
             return;
@@ -1668,6 +1679,8 @@ class DollarInvestmentSimulator {
         document.getElementById('additionalBudget').value = p.additionalBudget || 0;
         document.getElementById('additionalStrategy').value = p.additionalStrategy || 'monthly';
         document.getElementById('additionalPremiumLimitPct').value = p.additionalPremiumLimitPct || 200;
+        const additionalCb = document.getElementById('additionalEnabled');
+        if (additionalCb) additionalCb.checked = p.additionalEnabled || false;
         document.getElementById('insuredAmount').value = p.insuredAmount || 0;
         document.getElementById('enrollmentType').value = p.enrollmentType || 'simple';
         document.getElementById('maintenanceBonus1').value = p.maintenanceBonus1 || 0;
@@ -1683,12 +1696,21 @@ class DollarInvestmentSimulator {
             - parseFloat(document.getElementById('purchasePeriod').value)
             - parseFloat(document.getElementById('holdingPeriod').value);
         const showAdditional = conversionYears > 0;
-        // 추가납입 섹션 표시/숨김
-        const ids = ['additionalPremiumSection', 'additionalStrategyGroup', 'additionalBudgetGroup', 'additionalPremiumLimitGroup'];
-        ids.forEach(id => {
+        const additionalEnabled = document.getElementById('additionalEnabled')?.checked || false;
+        // 추가납입 섹션: 전환기간 있을 때만 체크박스 표시
+        const enableEl = document.getElementById('additionalEnableGroup');
+        if (enableEl) enableEl.style.display = showAdditional ? 'block' : 'none';
+        // 전략/예산/한도: 전환기간 있고 + 체크박스 ON일 때만 표시
+        const detailIds = ['additionalPremiumSection', 'additionalStrategyGroup', 'additionalBudgetGroup', 'additionalPremiumLimitGroup'];
+        detailIds.forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.style.display = showAdditional ? 'block' : 'none';
+            if (el) el.style.display = (showAdditional && additionalEnabled) ? 'block' : 'none';
         });
+    }
+
+    toggleAdditionalPremium() {
+        this.toggleDollarPremiumFields();
+        this.updateSimulation();
     }
 
     // ========================
@@ -2498,7 +2520,7 @@ class DollarInvestmentSimulator {
             totalPeriodYears: 'tp', dollarPremium: 'dp', fixedPaymentMultiplier: 'fm',
             purchasePeriodYears: 'pp', holdingPeriodYears: 'hp',
             interestRate: 'ir', compoundRate: 'cr', reserveInterestRate: 'ri',
-            additionalBudget: 'ab', additionalStrategy: 'as',
+            additionalBudget: 'ab', additionalStrategy: 'as', additionalEnabled: 'ae',
             insuredAmount: 'ia', interval: 'iv'
         };
         for (const [full, short] of Object.entries(shortKeys)) {
@@ -2531,6 +2553,12 @@ class DollarInvestmentSimulator {
                 const el = document.getElementById(elemId);
                 if (el) el.value = val;
             }
+        }
+        // additionalEnabled 체크박스 복원
+        const ae = params.get('ae');
+        if (ae !== null) {
+            const cb = document.getElementById('additionalEnabled');
+            if (cb) cb.checked = (ae === 'true' || ae === '1');
         }
         const name = params.get('name');
         if (name) {
@@ -3214,6 +3242,7 @@ function exportPdf() { simulator.exportPdf(); }
 function exportResultImage() { simulator.exportResultImage(); }
 function uploadConfig(event) { simulator.uploadConfig(event); }
 function applyPreset(type, event) { simulator.applyPreset(type, event); }
+function toggleAdditionalPremium() { simulator.toggleAdditionalPremium(); }
 function toggleSidebar() { simulator.toggleSidebar(); }
 function exportAsImage() { simulator.exportAsImage(); }
 function toggleFullscreen(id) { simulator.toggleFullscreen(id); }

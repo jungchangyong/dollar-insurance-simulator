@@ -2146,6 +2146,14 @@
                 <hr class="section-divider">
                 <div class="section-label" id="additionalPremiumSection" style="display:none;">저축전환 후 추가납입</div>
 
+                <div class="form-group" id="additionalEnableGroup" style="display:none;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" id="additionalEnabled" onchange="toggleAdditionalPremium()">
+                        <span>추가납입 사용</span>
+                    </label>
+                    <div class="small-text">* 체크 시 저축전환 시점 해약환급금을 추가납입 예산으로 자동 설정</div>
+                </div>
+
                 <div class="form-group" id="additionalStrategyGroup" style="display:none;">
                     <label for="additionalStrategy">추가납입 전략</label>
                     <select id="additionalStrategy" onchange="updateSimulation()">
